@@ -1147,8 +1147,14 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 : 'border-zinc-800/80 hover:border-[#09B1BA]/50'
             }`}
           >
-            {/* Image Header with Badges */}
-            <div className="relative aspect-[4/3] bg-zinc-950 overflow-hidden">
+            {/* Clickable Image: Opens item on Vinted ("Vedi su Vinted") */}
+            <a
+              href={item.vintedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative aspect-[4/3] bg-zinc-950 overflow-hidden block cursor-pointer group/img"
+              title="Vedi su Vinted"
+            >
               <img
                 src={item.imageUrl}
                 alt={item.title}
@@ -1162,7 +1168,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                     target.src = 'https://images1.vinted.net/t/04_005ba_An4HTJGzsV4nWGKrJSkHRe8Y/310x430/8c6d7fc2.webp';
                   }
                 }}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
                 loading="lazy"
               />
               {/* Status Badges */}
@@ -1187,7 +1193,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 <span className="truncate max-w-[130px]">{item.condition}</span>
                 <span className="font-bold text-[#09B1BA]">Taglia {item.size}</span>
               </div>
-            </div>
+            </a>
 
             {/* Content Details */}
             <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
@@ -1206,74 +1212,26 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 </h3>
               </div>
 
-              {/* Prezzo Vinted Highlight Box */}
+              {/* Solo Prezzo Vinted */}
               <div className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800/90 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] uppercase font-extrabold text-zinc-400 block tracking-wider">
-                    Prezzo Vinted
-                  </span>
-                  <div className="text-2xl font-black text-emerald-400 font-mono tracking-tight leading-none mt-1">
-                    €{item.price.toFixed(2)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-zinc-500 block font-medium">Garanzia</span>
-                  <span className="text-xs font-bold text-teal-400">
-                    Acquisto Protetto
-                  </span>
-                </div>
+                <span className="text-xs uppercase font-extrabold text-zinc-400 tracking-wider">
+                  Prezzo Vinted
+                </span>
+                <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
+                  €{item.price.toFixed(2)}
+                </span>
               </div>
 
-              {/* Fast Buy & Direct Actions */}
-              <div className="space-y-1.5 pt-1">
+              {/* Compra su Vinted Button */}
+              <div className="pt-1">
                 <a
                   href={item.vintedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-2.5 px-3 rounded-xl bg-[#09B1BA] hover:bg-[#079aa2] text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md shadow-[#09B1BA]/20 active:scale-95 cursor-pointer"
+                  className="w-full py-3 px-4 rounded-xl bg-[#09B1BA] hover:bg-[#079aa2] text-zinc-950 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md shadow-[#09B1BA]/20 active:scale-95 cursor-pointer"
                 >
                   <Zap className="w-4 h-4 fill-zinc-950" />
-                  COMPRA SUBITO SU VINTED
-                </a>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    onClick={() => onAutocopItem(item)}
-                    className="py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[#09B1BA] font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95"
-                  >
-                    <span>🤖</span> Sniper Bot
-                  </button>
-                  <button
-                    onClick={() => handleCopyLink(item)}
-                    className="py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    {copiedId === item.id ? (
-                      <><Check className="w-3.5 h-3.5 text-emerald-400" /> Copiato!</>
-                    ) : (
-                      <><Copy className="w-3.5 h-3.5" /> Copia Link</>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Bottom Card Bar */}
-              <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
-                <button
-                  onClick={() => handleCopyLink(item)}
-                  className="hover:text-zinc-200 flex items-center gap-1 transition-colors"
-                >
-                  {copiedId === item.id ? (
-                    <><Check className="w-3 h-3 text-emerald-400" /> Copiato!</>
-                  ) : (
-                    <><Copy className="w-3 h-3" /> Copia Link</>
-                  )}
-                </button>
-                <a
-                  href={item.vintedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-[#09B1BA] flex items-center gap-1 transition-colors font-medium"
-                >
-                  Vedi su Vinted <ExternalLink className="w-3 h-3" />
+                  COMPRA SU VINTED
                 </a>
               </div>
 
