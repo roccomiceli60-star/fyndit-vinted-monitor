@@ -67,8 +67,16 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   const [minPrice, setMinPrice] = useState<string>('');
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [onlySteals, setOnlySteals] = useState(false);
+  const [onlyRecentDrops, setOnlyRecentDrops] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  const formatTimeAgo = (seconds: number): string => {
+    if (seconds <= 40) return 'Appena messo!';
+    if (seconds < 60) return `${seconds}s fa`;
+    const mins = Math.floor(seconds / 60);
+    return `${mins} min fa`;
+  };
 
   useEffect(() => {
     setSearchInput(currentSearch);
@@ -112,6 +120,8 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   // Client-side refined filtering (only for secondary criteria)
   const displayedListings = listings.filter((item) => {
     if (onlySteals && item.dealScore !== 'STEAL') return false;
+    // Exclude old listings (> 20 minutes) if onlyRecentDrops is active
+    if (onlyRecentDrops && item.publishedSecondsAgo > 1200) return false;
     
     // Category match
     if (selectedCategory !== 'Tutte le categorie') {
@@ -419,6 +429,21 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             <span>Solo Affari (Steal)</span>
           </button>
 
+          {/* Only Fresh Drops (< 20 min) Toggle */}
+          <button
+            type="button"
+            onClick={() => setOnlyRecentDrops(!onlyRecentDrops)}
+            className={`px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-all font-semibold ${
+              onlyRecentDrops
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-500/20'
+                : 'bg-zinc-950 text-zinc-400 border-zinc-700 hover:border-zinc-500'
+            }`}
+            title="Nasconde categoricamente qualsiasi articolo inserito ore o giorni fa"
+          >
+            <span className={`w-2 h-2 rounded-full ${onlyRecentDrops ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+            <span>Solo Appena Pubblicati (&lt; 20 min)</span>
+          </button>
+
           {/* Clear Filters Button */}
           {hasActiveFilters && (
             <button
@@ -542,7 +567,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
               <div className="absolute top-2.5 right-2.5">
                 <span className="px-2 py-0.5 rounded-md bg-zinc-950/85 backdrop-blur text-[11px] font-semibold text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {item.publishedSecondsAgo <= 2 ? 'Appena messo!' : `${item.publishedSecondsAgo}s fa`}
+                  {formatTimeAgo(item.publishedSecondsAgo)}
                 </span>
               </div>
 

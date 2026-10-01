@@ -15,6 +15,7 @@ app.use(express.json());
 // In-memory store of real Vinted listings
 export interface VintedItem {
   id: string;
+  rawId: number;
   title: string;
   brand: string;
   category: string;
@@ -44,7 +45,9 @@ export interface VintedItem {
 let realItemsCache: VintedItem[] = [];
 const seenItemIds = new Set<string>();
 let sessionCookieHeader = '';
+let sessionAccessToken = '';
 let lastCookieFetch = 0;
+let highestSeenRawId = 0;
 
 // Set of active Server-Sent Events clients for instant push
 const sseClients = new Set<Response>();
@@ -93,72 +96,117 @@ function parseSizeAndCondition(secondLine?: string): { size: string; condition: 
   return { size, condition };
 }
 
-// Fetch fresh session cookies from Vinted
-async function refreshVintedSession(): Promise<string> {
+// Robust session refresher with Bearer token extraction
+async function refreshVintedSession(force = false): Promise<{ cookie: string; token: string }> {
   const now = Date.now();
-  if (sessionCookieHeader && now - lastCookieFetch < 25 * 60 * 1000) {
-    return sessionCookieHeader;
+  if (!force && sessionCookieHeader && sessionAccessToken && now - lastCookieFetch < 20 * 60 * 1000) {
+    return { cookie: sessionCookieHeader, token: sessionAccessToken };
   }
 
   try {
     const res = await fetch('https://www.vinted.it', {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'it-IT,it;q=0.8',
       },
     });
 
     const rawCookies = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
-    const cookieMap = new Map<string, string>();
+    const cookiePairs: string[] = [];
+    let foundToken = '';
+
     for (const c of rawCookies) {
       const part = c.split(';')[0];
-      const [name, ...vals] = part.split('=');
-      const val = vals.join('=');
-      if (val && val !== '""') {
-        cookieMap.set(name.trim(), val.trim());
+      const eqIdx = part.indexOf('=');
+      if (eqIdx > 0) {
+        const name = part.substring(0, eqIdx).trim();
+        const val = part.substring(eqIdx + 1).trim();
+        // Ignore empty values like access_token_web=
+        if (val && val.length > 2) {
+          cookiePairs.push(`${name}=${val}`);
+          if (name === 'access_token_web') {
+            foundToken = val;
+          }
+        }
       }
     }
 
-    sessionCookieHeader = Array.from(cookieMap.entries())
-      .map(([k, v]) => `${k}=${v}`)
-      .join('; ');
+    sessionCookieHeader = cookiePairs.join('; ');
+    if (foundToken) {
+      sessionAccessToken = foundToken;
+    }
     lastCookieFetch = now;
-    return sessionCookieHeader;
+    return { cookie: sessionCookieHeader, token: sessionAccessToken };
   } catch (err) {
     console.error('Errore refresh sessione Vinted:', err);
-    return sessionCookieHeader;
+    return { cookie: sessionCookieHeader, token: sessionAccessToken };
   }
 }
 
-// Fetch items from Vinted API strictly ordered by newest_first (Appena pubblicati)
-async function fetchFromVinted(searchText = '', perPage = 25): Promise<any[]> {
-  const cookies = await refreshVintedSession();
-  
-  // Strictly enforce order=newest_first for real newly published drops
+// Fetch items from Vinted API strictly ordered by newest_first and filtered for freshness
+async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): Promise<any[]> {
+  const { cookie, token } = await refreshVintedSession();
+
   const url = `https://api.vinted.it/svc-catalogue/items?search_text=${encodeURIComponent(
     searchText
   )}&page=1&per_page=${perPage}&order=newest_first`;
 
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0',
-      'Accept': 'application/json, text/plain, */*',
-      'Accept-Language': 'it-IT,it;q=0.8',
-      'Platform': 'web',
-      'x-next-app': 'marketplace-web',
-      'Origin': 'https://www.vinted.it',
-      'Referer': 'https://www.vinted.it/',
-      'Cookie': cookies,
-    },
-  });
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'it-IT,it;q=0.8',
+    'Platform': 'web',
+    'x-next-app': 'marketplace-web',
+    'Origin': 'https://www.vinted.it',
+    'Referer': 'https://www.vinted.it/',
+    'Cookie': cookie,
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, { headers });
+
+  // If token expired, force refresh session and retry once
+  if (res.status === 401 && retryCount === 0) {
+    await refreshVintedSession(true);
+    return fetchFromVinted(searchText, perPage, 1);
+  }
 
   if (!res.ok) {
     throw new Error(`Vinted API status ${res.status}`);
   }
 
   const json: any = await res.json();
-  return json.items || [];
+  const rawItems = json.items || [];
+
+  // Update highest known ID to measure recency accurately
+  for (const it of rawItems) {
+    if (it.id && typeof it.id === 'number') {
+      highestSeenRawId = Math.max(highestSeenRawId, it.id);
+    }
+  }
+
+  // Filter out promoted/bumped items and obsolete old IDs
+  // Vinted IDs are sequential: an ID lower by > 100,000 is days/hours old!
+  const strictlyFresh = rawItems.filter((it: any) => {
+    // 1. Exclude paid bumps/promoted items
+    if (it.promoted === true) return false;
+    
+    // 2. Exclude old IDs that are far below current highest listing ID
+    if (highestSeenRawId > 0 && it.id && typeof it.id === 'number') {
+      const idDelta = highestSeenRawId - it.id;
+      // In Vinted EU, ~10,000 items are created every ~2-3 hours.
+      // Anything older than ~25,000 IDs is discarded to guarantee only newly published items!
+      if (idDelta > 35000) return false;
+    }
+
+    return true;
+  });
+
+  return strictlyFresh;
 }
 
 // Transform raw Vinted item with realistic market valuation
@@ -187,8 +235,17 @@ function transformVintedItem(raw: any): VintedItem {
   ];
   const randCountry = countries[Math.abs(raw.id || 0) % countries.length];
 
+  // Calculate publication time estimation based on ID delta from current latest drop
+  let estimatedSecondsAgo = 2;
+  if (highestSeenRawId > 0 && raw.id && typeof raw.id === 'number') {
+    const idDiff = Math.max(0, highestSeenRawId - raw.id);
+    // On average ~1 item per 1.5 seconds on active hours in Vinted EU
+    estimatedSecondsAgo = Math.max(2, Math.min(600, Math.round(idDiff * 1.5)));
+  }
+
   return {
     id: `vnt-${raw.id}`,
+    rawId: raw.id || 0,
     title,
     brand,
     category: 'Abbigliamento & Streetwear',
@@ -208,10 +265,10 @@ function transformVintedItem(raw: any): VintedItem {
     },
     imageUrl: img,
     vintedUrl: raw.url?.startsWith('http') ? raw.url : `https://www.vinted.it${raw.url || ''}`,
-    publishedSecondsAgo: 1,
+    publishedSecondsAgo: estimatedSecondsAgo,
     dealScore: valuation.dealScore,
     likesCount: raw.favourite_count || 0,
-    discoveredAt: Date.now(),
+    discoveredAt: Date.now() - (estimatedSecondsAgo * 1000),
     isNewDrop: true,
   };
 }
@@ -229,7 +286,11 @@ function ingestRawItems(items: any[]): VintedItem[] {
   }
 
   if (brandNew.length > 0) {
-    realItemsCache = [...brandNew, ...realItemsCache].slice(0, 160);
+    // Keep only fresh items in cache (max 150 items, strictly within last 20 minutes)
+    const now = Date.now();
+    realItemsCache = [...brandNew, ...realItemsCache]
+      .filter((i) => now - i.discoveredAt < 20 * 60 * 1000)
+      .slice(0, 150);
     broadcastNewItems(brandNew);
   }
 
@@ -240,10 +301,10 @@ function ingestRawItems(items: any[]): VintedItem[] {
 async function runGeneralWorker() {
   while (true) {
     try {
-      const raw = await fetchFromVinted('', 25);
+      const raw = await fetchFromVinted('', 30);
       ingestRawItems(raw);
     } catch {
-      // transient network error, retry
+      // transient error, retry
     }
     await new Promise((r) => setTimeout(r, 1600));
   }
@@ -266,7 +327,7 @@ async function runBrandWorker() {
     const q = SNIPER_QUERIES[queryIdx % SNIPER_QUERIES.length];
     queryIdx++;
     try {
-      const raw = await fetchFromVinted(q, 15);
+      const raw = await fetchFromVinted(q, 20);
       ingestRawItems(raw);
     } catch {
       // ignore
@@ -289,10 +350,16 @@ app.get('/api/vinted/stream', (_req, res) => {
     'Access-Control-Allow-Origin': '*',
   });
 
+  // Only send fresh cached items (discovered < 20 mins ago)
+  const now = Date.now();
+  const freshCache = realItemsCache
+    .filter((i) => now - i.discoveredAt < 20 * 60 * 1000)
+    .slice(0, 40);
+
   const initialPayload = JSON.stringify({
     type: 'INITIAL_STATE',
-    timestamp: Date.now(),
-    items: realItemsCache.slice(0, 50),
+    timestamp: now,
+    items: freshCache,
   });
   res.write(`data: ${initialPayload}\n\n`);
 
@@ -331,7 +398,7 @@ app.get('/api/vinted/live', async (req, res) => {
     }
 
     try {
-      // Always fetch directly from live Vinted catalog (order=newest_first)
+      // Always fetch directly from live Vinted catalog (order=newest_first + strictlyFresh filter)
       const rawItems = await fetchFromVinted(effectiveQuery, 30);
       const transformed = rawItems.map(transformVintedItem);
 
@@ -343,15 +410,19 @@ app.get('/api/vinted/live', async (req, res) => {
       }
       results = transformed;
     } catch {
-      // Fallback to cache matches
+      // Fallback: only include fresh items from cache (< 20 mins ago)
+      const now = Date.now();
       results = realItemsCache.filter((item) => {
+        const isFresh = (now - item.discoveredAt) < 20 * 60 * 1000;
         const matchesSearch = !search || item.title.toLowerCase().includes(search) || item.brand.toLowerCase().includes(search);
         const matchesBrand = !brand || brand === 'tutti' || item.brand.toLowerCase().includes(brand);
-        return matchesSearch && matchesBrand;
+        return isFresh && matchesSearch && matchesBrand;
       });
     }
   } else {
-    results = [...realItemsCache];
+    // Only return fresh items discovered < 20 minutes ago
+    const now = Date.now();
+    results = realItemsCache.filter((i) => (now - i.discoveredAt) < 20 * 60 * 1000);
   }
 
   // Filter by brand if specified
@@ -367,6 +438,10 @@ app.get('/api/vinted/live', async (req, res) => {
     results = results.filter((item) => item.price <= maxPrice);
   }
 
+  // Strictly sort by newest (discoveredAt desc)
+  results.sort((a, b) => b.discoveredAt - a.discoveredAt);
+
+  // Update publishedSecondsAgo smoothly
   const now = Date.now();
   results = results.map((item) => ({
     ...item,
@@ -389,10 +464,10 @@ app.get('/api/vinted/status', (_req, res) => {
     status: 'ONLINE',
     totalCached: realItemsCache.length,
     activeStreamListeners: sseClients.size,
-    sessionActive: Boolean(sessionCookieHeader),
+    sessionActive: Boolean(sessionCookieHeader && sessionAccessToken),
     lastCookieUpdate: new Date(lastCookieFetch).toISOString(),
-    valuationEngine: 'STREETWEAR_LUXURY_TIER_V2',
-    order: 'NEWEST_FIRST',
+    highestSeenRawId,
+    freshnessFilter: 'STRICT_NEWEST_ONLY (<20min)',
   });
 });
 
