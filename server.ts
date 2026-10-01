@@ -1,6 +1,8 @@
 import express, { Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import fs from 'fs';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { calculateMarketValuation } from './src/utils/marketValuation.ts';
 import { detectCategory } from './src/data/vintedCategories.ts';
@@ -456,6 +458,34 @@ app.get('/api/vinted/status', (_req, res) => {
     highestSeenRawId,
     freshnessFilter: 'STRICT_NEWEST_ONLY (<20min)',
   });
+});
+
+// Download project archive zip
+app.get('/api/download-zip', (_req, res) => {
+  const zipPath = path.resolve(__dirname, 'fyndit-updated.zip');
+  if (fs.existsSync(zipPath)) {
+    res.download(zipPath, 'fyndit-vinted-monitor.zip');
+  } else {
+    res.status(404).json({ error: 'Archivio zip non ancora disponibile' });
+  }
+});
+
+// Push directly to user's GitHub repository if token is provided
+app.post('/api/github-push', (req, res) => {
+  const { token, repo } = req.body;
+  if (!token) {
+    return res.status(400).json({ success: false, error: 'Token GitHub obbligatorio (Personal Access Token con permessi repo)' });
+  }
+  const targetRepo = repo || 'roccomiceli60-star/fyndit-vinted-monitor';
+  try {
+    const authUrl = `https://${token.trim()}@github.com/${targetRepo.trim()}.git`;
+    execSync(`git remote set-url origin "${authUrl}"`, { cwd: __dirname });
+    execSync(`git branch -M main`, { cwd: __dirname });
+    const pushOutput = execSync(`git push -u origin main --force`, { cwd: __dirname }).toString();
+    res.json({ success: true, message: 'Push effettuato con successo su GitHub!', output: pushOutput });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.stderr ? err.stderr.toString() : err.message });
+  }
 });
 
 // Mount Vite or static server
