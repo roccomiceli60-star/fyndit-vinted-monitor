@@ -1297,9 +1297,16 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 <span className="text-[9px] sm:text-[10px] uppercase font-extrabold text-zinc-400 tracking-wider">
                   Prezzo Vinted
                 </span>
-                <span className="text-sm sm:text-base font-black text-emerald-400 font-mono tracking-tight">
-                  €{item.price.toFixed(2)}
-                </span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-sm sm:text-base font-black text-emerald-400 font-mono tracking-tight">
+                    €{item.price.toFixed(2)}
+                  </span>
+                  {item.originalCurrency && item.originalCurrency !== 'EUR' && (
+                    <span className="text-[9px] sm:text-[10px] text-zinc-400 font-mono">
+                      ({item.originalPriceDisplay})
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Compra su Vinted Button */}

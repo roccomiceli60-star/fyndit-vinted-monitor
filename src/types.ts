@@ -16,6 +16,10 @@ export interface VintedListing {
   size: string;
   condition: ConditionType;
   price: number;
+  originalPrice?: number;
+  originalCurrency?: string;
+  originalCurrencySymbol?: string;
+  originalPriceDisplay?: string;
   marketValue: number;
   discountPercent: number;
   seller: {

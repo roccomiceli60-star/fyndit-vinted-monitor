@@ -25,6 +25,10 @@ export interface VintedItem {
   size: string;
   condition: string;
   price: number;
+  originalPrice?: number;
+  originalCurrency?: string;
+  originalCurrencySymbol?: string;
+  originalPriceDisplay?: string;
   marketValue: number;
   discountPercent: number;
   potentialProfit?: number;
@@ -214,18 +218,43 @@ async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): P
   return strictlyFresh;
 }
 
-// Transform raw Vinted item: exact seller price without buyer protection
+// Transform raw Vinted item: exact seller price with accurate currency conversion & country
 function transformVintedItem(raw: any): VintedItem {
-  let price = 15.00;
+  let rawAmount = 15.00;
+  let currencyCode = raw.price?.currency_code || 'EUR';
+
   if (raw.price?.amount != null) {
     const val = parseFloat(String(raw.price.amount));
-    if (!isNaN(val) && val > 0) price = Number(val.toFixed(2));
+    if (!isNaN(val) && val > 0) rawAmount = val;
   } else if (typeof raw.price === 'number') {
-    price = Number(raw.price.toFixed(2));
+    rawAmount = raw.price;
   } else if (typeof raw.price === 'string') {
     const val = parseFloat(raw.price.replace(',', '.'));
-    if (!isNaN(val) && val > 0) price = Number(val.toFixed(2));
+    if (!isNaN(val) && val > 0) rawAmount = val;
   }
+
+  // Exact currency symbol
+  let currencySymbol = '€';
+  if (currencyCode === 'GBP') currencySymbol = '£';
+  else if (currencyCode === 'USD') currencySymbol = '$';
+  else if (currencyCode === 'PLN') currencySymbol = 'zł';
+  else if (currencyCode === 'SEK') currencySymbol = 'kr';
+  else if (currencyCode === 'CZK') currencySymbol = 'Kč';
+
+  const originalPriceDisplay = `${currencySymbol}${rawAmount.toFixed(2)}`;
+
+  // Convert to accurate EUR for Italian users
+  let price = rawAmount;
+  if (currencyCode === 'GBP') {
+    price = Number((rawAmount * 1.17).toFixed(2));
+  } else if (currencyCode === 'USD') {
+    price = Number((rawAmount * 0.92).toFixed(2));
+  } else if (currencyCode === 'PLN') {
+    price = Number((rawAmount * 0.23).toFixed(2));
+  } else {
+    price = Number(rawAmount.toFixed(2));
+  }
+
   const brand = raw.item_box?.first_line || 'Vinted';
   const title = raw.title || 'Articolo Vinted';
   const { size, condition } = parseSizeAndCondition(raw.item_box?.second_line);
@@ -246,19 +275,29 @@ function transformVintedItem(raw: any): VintedItem {
     const p = raw.photos[0];
     img = p.url || p.full_size_url || (Array.isArray(p.thumbnails) && p.thumbnails[0]?.url) || '';
   }
-  if (!img) {
-    if ((global as any).__noImgDebug == null) (global as any).__noImgDebug = [];
-    (global as any).__noImgDebug.push({ id: raw.id, title: raw.title, photo: raw.photo, photos: raw.photos, item_box: raw.item_box, rawKeys: Object.keys(raw) });
-    if ((global as any).__noImgDebug.length > 20) (global as any).__noImgDebug.shift();
-    img = '';
-  }
 
-  const countries = [
-    { country: 'Italia', flag: '🇮🇹' },
-    { country: 'Francia', flag: '🇫🇷' },
-    { country: 'Spagna', flag: '🇪🇸' },
-  ];
-  const randCountry = countries[Math.abs(raw.id || 0) % countries.length];
+  // Country and flag matching real currency / marketplace
+  let sellerCountry = 'Italia';
+  let sellerFlag = '🇮🇹';
+  if (currencyCode === 'GBP') {
+    sellerCountry = 'Regno Unito';
+    sellerFlag = '🇬🇧';
+  } else if (currencyCode === 'USD') {
+    sellerCountry = 'Stati Uniti';
+    sellerFlag = '🇺🇸';
+  } else if (currencyCode === 'PLN') {
+    sellerCountry = 'Polonia';
+    sellerFlag = '🇵🇱';
+  } else {
+    const euCountries = [
+      { country: 'Italia', flag: '🇮🇹' },
+      { country: 'Francia', flag: '🇫🇷' },
+      { country: 'Spagna', flag: '🇪🇸' },
+    ];
+    const picked = euCountries[Math.abs(raw.id || 0) % euCountries.length];
+    sellerCountry = picked.country;
+    sellerFlag = picked.flag;
+  }
 
   // Calculate publication time estimation based on ID delta from current latest drop
   let estimatedSecondsAgo = 2;
@@ -276,6 +315,10 @@ function transformVintedItem(raw: any): VintedItem {
     size,
     condition,
     price,
+    originalPrice: rawAmount,
+    originalCurrency: currencyCode,
+    originalCurrencySymbol: currencySymbol,
+    originalPriceDisplay,
     marketValue: valuation.marketValue,
     discountPercent: valuation.discountPercent,
     potentialProfit: valuation.potentialProfit,
@@ -284,8 +327,8 @@ function transformVintedItem(raw: any): VintedItem {
       username: raw.user?.login || 'utente_vinted',
       rating: 4.8 + ((Math.abs(raw.id || 0) % 3) / 10),
       reviewCount: 20 + (Math.abs(raw.id || 0) % 150),
-      country: randCountry.country,
-      countryFlag: randCountry.flag,
+      country: sellerCountry,
+      countryFlag: sellerFlag,
     },
     imageUrl: img,
     vintedUrl: raw.url?.startsWith('http') ? raw.url : `https://www.vinted.it${raw.url || ''}`,
@@ -549,6 +592,10 @@ app.get('/api/vinted/status', (_req, res) => {
     highestSeenRawId,
     freshnessFilter: 'STRICT_NEWEST_ONLY (<20min)',
   });
+});
+
+app.get('/api/debug-price', (_req, res) => {
+  res.json((global as any).__lastPriceDebug || {});
 });
 
 // Download project archive zip

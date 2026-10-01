@@ -281,7 +281,24 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                     let title = raw["title"] as? String ?? "Articolo Vinted"
                     let priceDict = raw["price"] as? [String: Any]
                     let priceStr = priceDict?["amount"] as? String ?? "15.00"
-                    let price = Double(priceStr) ?? 15.0
+                    let currencyCode = priceDict?["currency_code"] as? String ?? "EUR"
+                    let rawPrice = Double(priceStr) ?? 15.0
+
+                    var currencySymbol = "€"
+                    if currencyCode == "GBP" { currencySymbol = "£" }
+                    else if currencyCode == "USD" { currencySymbol = "$" }
+                    else if currencyCode == "PLN" { currencySymbol = "zł" }
+
+                    let originalPriceDisplay = String(format: "%@%.2f", currencySymbol, rawPrice)
+
+                    var price = rawPrice
+                    if currencyCode == "GBP" {
+                        price = round(rawPrice * 1.17 * 100) / 100
+                    } else if currencyCode == "USD" {
+                        price = round(rawPrice * 0.92 * 100) / 100
+                    } else if currencyCode == "PLN" {
+                        price = round(rawPrice * 0.23 * 100) / 100
+                    }
 
                     let itemBox = raw["item_box"] as? [String: Any]
                     let brandName = itemBox?["first_line"] as? String ?? "Vinted"
@@ -325,6 +342,10 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                         "size": secondLine.components(separatedBy: " ").first ?? "M",
                         "condition": "Ottime condizioni",
                         "price": price,
+                        "originalPrice": rawPrice,
+                        "originalCurrency": currencyCode,
+                        "originalCurrencySymbol": currencySymbol,
+                        "originalPriceDisplay": originalPriceDisplay,
                         "marketValue": marketVal,
                         "discountPercent": max(15, discount),
                         "potentialProfit": profit,
@@ -332,8 +353,8 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                             "username": "utente_vinted",
                             "rating": 5.0,
                             "reviewCount": 42,
-                            "country": "Italia",
-                            "countryFlag": "🇮🇹"
+                            "country": currencyCode == "GBP" ? "Regno Unito" : (currencyCode == "USD" ? "Stati Uniti" : "Italia"),
+                            "countryFlag": currencyCode == "GBP" ? "🇬🇧" : (currencyCode == "USD" ? "🇺🇸" : "🇮🇹")
                         ],
                         "imageUrl": imgUrl,
                         "vintedUrl": vintedUrl,
