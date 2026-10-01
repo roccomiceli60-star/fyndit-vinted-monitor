@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import fynditIcon from '../assets/images/fyndit_icon_1790842000865.jpg';
 
-export type TabType = 'feed' | 'monitors' | 'calculator' | 'autocop' | 'guide' | 'ipa';
+export type TabType = 'feed' | 'monitors' | 'autocop' | 'guide' | 'ipa';
 
 interface HeaderProps {
   activeTab: TabType;
@@ -92,18 +92,6 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('calculator')}
-            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 ${
-              activeTab === 'calculator'
-                ? 'bg-zinc-800 text-white font-semibold shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-            }`}
-          >
-            <Calculator className={`w-4 h-4 ${activeTab === 'calculator' ? 'text-emerald-400' : ''}`} />
-            Calcola Profitto
-          </button>
-
-          <button
             onClick={() => setActiveTab('autocop')}
             className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 ${
               activeTab === 'autocop'
@@ -176,14 +164,6 @@ export const Header: React.FC<HeaderProps> = ({
           }`}
         >
           <Target className="w-3.5 h-3.5 text-cyan-400" /> Monitor ({activeMonitorsCount})
-        </button>
-        <button
-          onClick={() => setActiveTab('calculator')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'calculator' ? 'bg-zinc-800 text-white font-semibold' : 'text-zinc-400'
-          }`}
-        >
-          <Calculator className="w-3.5 h-3.5 text-emerald-400" /> Calcola
         </button>
         <button
           onClick={() => setActiveTab('autocop')}

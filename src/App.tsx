@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Header, TabType } from './components/Header';
 import { LiveFeedView } from './components/LiveFeedView';
 import { MonitorsManager } from './components/MonitorsManager';
-import { ProfitCalculator } from './components/ProfitCalculator';
 import { AutocopSimulator } from './components/AutocopSimulator';
 import { GuidesView } from './components/GuidesView';
 import { IpaExportView } from './components/IpaExportView';
@@ -14,7 +13,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
   const [listings, setListings] = useState<VintedListing[]>(INITIAL_LISTINGS);
   const [monitors, setMonitors] = useState<VintedMonitor[]>(INITIAL_MONITORS);
-  const [calculatorItem, setCalculatorItem] = useState<VintedListing | null>(null);
   const [newDealsCount, setNewDealsCount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number>(1);
@@ -221,11 +219,6 @@ export default function App() {
     setLatencyMs(1);
   }, []);
 
-  const handleOpenCalculatorWithItem = (item: VintedListing) => {
-    setCalculatorItem(item);
-    setActiveTab('calculator');
-  };
-
   const handleAutocopItem = (item: VintedListing) => {
     setToastMessage(`⚡ Aperto su Vinted: "${item.title}" a €${item.price.toFixed(2)}`);
     playAlertChime();
@@ -319,7 +312,6 @@ export default function App() {
         {activeTab === 'feed' && (
           <LiveFeedView
             listings={listings}
-            onOpenCalculatorWithItem={handleOpenCalculatorWithItem}
             onAutocopItem={handleAutocopItem}
             onFilterChange={executeSearch}
             currentSearch={activeSearch}
@@ -334,10 +326,6 @@ export default function App() {
             onDeleteMonitor={handleDeleteMonitor}
             onAddMonitor={handleAddMonitor}
           />
-        )}
-
-        {activeTab === 'calculator' && (
-          <ProfitCalculator initialItem={calculatorItem} />
         )}
 
         {activeTab === 'autocop' && (
