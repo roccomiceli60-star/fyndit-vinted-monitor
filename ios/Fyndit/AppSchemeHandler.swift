@@ -288,7 +288,7 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                     let secondLine = itemBox?["second_line"] as? String ?? "M / Ottime condizioni"
 
                     // Extract image
-                    var imgUrl = "https://images1.vinted.net/t/04_005ba_An4HTJGzsV4nWGKrJSkHRe8Y/310x430/8c6d7fc2.webp"
+                    var imgUrl = "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=400&q=80"
                     if let photo = raw["photo"] as? [String: Any] {
                         if let thumbs = photo["thumbnails"] as? [[String: Any]], let last = thumbs.last, let u = last["url"] as? String {
                             imgUrl = u

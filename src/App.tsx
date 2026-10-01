@@ -164,10 +164,10 @@ export default function App() {
     // Immediate fetch
     fetchLiveRealtimeDrops(false);
 
-    // Guaranteed real-time 1.8s pulse interval
+    // Guaranteed real-time 1s ultra-fast pulse interval
     const interval = setInterval(() => {
       fetchLiveRealtimeDrops(false);
-    }, 1800);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [autoRefresh, fetchLiveRealtimeDrops]);

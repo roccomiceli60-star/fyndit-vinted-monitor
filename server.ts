@@ -240,7 +240,7 @@ function transformVintedItem(raw: any): VintedItem {
     img = p.url || p.full_size_url || (Array.isArray(p.thumbnails) && p.thumbnails[0]?.url) || '';
   }
   if (!img) {
-    img = 'https://images1.vinted.net/t/04_005ba_An4HTJGzsV4nWGKrJSkHRe8Y/310x430/8c6d7fc2.webp';
+    img = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=400&q=80';
   }
 
   const countries = [
@@ -309,8 +309,8 @@ function ingestRawItems(items: any[]): VintedItem[] {
   return brandNew;
 }
 
-// Micro-Worker 1: General newest drops (Highest priority)
-async function runGeneralWorker() {
+// Interleaved drop workers for sub-second real-time detection
+async function runGeneralWorker(workerId = 1) {
   while (true) {
     try {
       const raw = await fetchFromVinted('', 30);
@@ -318,7 +318,7 @@ async function runGeneralWorker() {
     } catch {
       // transient error, retry
     }
-    await new Promise((r) => setTimeout(r, 1600));
+    await new Promise((r) => setTimeout(r, 900));
   }
 }
 
@@ -349,12 +349,14 @@ async function runBrandWorker() {
     } catch {
       // ignore
     }
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 1200));
   }
 }
 
-runGeneralWorker();
-setTimeout(runBrandWorker, 800);
+// Start two interleaved general workers (staggered by 450ms) + brand sniper worker
+runGeneralWorker(1);
+setTimeout(() => runGeneralWorker(2), 450);
+setTimeout(runBrandWorker, 600);
 
 // API Routes
 // 1. SSE Stream: Pushes new items the millisecond they are detected
@@ -468,11 +470,24 @@ app.get('/api/vinted/live', async (req, res) => {
   });
 });
 
+// Fast In-Memory Image Cache (prevents duplicate fetches and serves images in < 2ms)
+const imageMemoryCache = new Map<string, { buffer: Buffer; contentType: string; expireAt: number }>();
+const FALLBACK_PLACEHOLDER_URL = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=400&q=80';
+
 app.get('/api/image-proxy', async (req, res) => {
   const imageUrl = req.query.url as string;
   if (!imageUrl || !imageUrl.startsWith('http')) {
-    return res.status(400).send('Invalid url');
+    return res.redirect(302, FALLBACK_PLACEHOLDER_URL);
   }
+
+  // Check in-memory cache
+  const cached = imageMemoryCache.get(imageUrl);
+  if (cached && cached.expireAt > Date.now()) {
+    res.setHeader('Content-Type', cached.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    return res.send(cached.buffer);
+  }
+
   try {
     const upstream = await fetch(imageUrl, {
       headers: {
@@ -480,17 +495,32 @@ app.get('/api/image-proxy', async (req, res) => {
         'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
         'Referer': 'https://www.vinted.it/',
       },
+      signal: AbortSignal.timeout(4000),
     });
+
     if (!upstream.ok) {
-      return res.status(upstream.status).send('Failed to fetch image');
+      return res.redirect(302, FALLBACK_PLACEHOLDER_URL);
     }
+
     const contentType = upstream.headers.get('content-type') || 'image/webp';
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+
+    // Save in cache for 2 hours
+    if (imageMemoryCache.size > 500) {
+      const firstKey = imageMemoryCache.keys().next().value;
+      if (firstKey) imageMemoryCache.delete(firstKey);
+    }
+    imageMemoryCache.set(imageUrl, {
+      buffer,
+      contentType,
+      expireAt: Date.now() + 2 * 60 * 60 * 1000,
+    });
+
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-    const buffer = await upstream.arrayBuffer();
-    res.send(Buffer.from(buffer));
-  } catch (err) {
-    res.status(500).send('Proxy error');
+    res.send(buffer);
+  } catch {
+    res.redirect(302, FALLBACK_PLACEHOLDER_URL);
   }
 });
 

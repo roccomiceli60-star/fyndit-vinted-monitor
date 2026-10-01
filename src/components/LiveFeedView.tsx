@@ -1244,11 +1244,12 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                     target.dataset.triedProxy = 'true';
                     target.src = `/api/image-proxy?url=${encodeURIComponent(item.imageUrl)}`;
                   } else {
-                    target.src = 'https://images1.vinted.net/t/04_005ba_An4HTJGzsV4nWGKrJSkHRe8Y/310x430/8c6d7fc2.webp';
+                    target.src = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=400&q=80';
                   }
                 }}
-                className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
-                loading="lazy"
+                className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300 bg-zinc-950"
+                loading="eager"
+                decoding="async"
               />
               {/* Status Badges */}
               <div className="absolute top-1.5 left-1.5 flex items-center gap-1 flex-wrap">
