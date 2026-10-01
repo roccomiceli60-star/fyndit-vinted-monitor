@@ -29,14 +29,17 @@ class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         
-        webView = WKWebView(frame: view.bounds, configuration: configuration)
-        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.isOpaque = false
         webView.backgroundColor = UIColor(red: 9/255.0, green: 9/255.0, blue: 11/255.0, alpha: 1.0)
         webView.scrollView.backgroundColor = UIColor(red: 9/255.0, green: 9/255.0, blue: 11/255.0, alpha: 1.0)
         webView.scrollView.bounces = true
+        
+        // Enable true edge-to-edge full screen extending behind status bar and home indicator
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         
         if #available(iOS 16.4, *) {
             webView.isInspectable = true
@@ -48,6 +51,14 @@ class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         webView.scrollView.refreshControl = refreshControl
         
         view.addSubview(webView)
+        
+        // Pin strictly to view bounds for 100% true full screen (no letterboxing)
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
     }
 
     private func setupLoadingIndicator() {
@@ -96,6 +107,30 @@ class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         activityIndicator.stopAnimating()
         webView.scrollView.refreshControl?.endRefreshing()
+    }
+
+    // Open external links (e.g. Vinted item URLs, Google) in Safari / Vinted App
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        
+        let scheme = url.scheme?.lowercased() ?? ""
+        if scheme == "app" || scheme == "file" || scheme == "about" {
+            decisionHandler(.allow)
+        } else {
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            decisionHandler(.cancel)
+        }
+    }
+
+    // Support window.open(_blank)
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url {
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        }
+        return nil
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle {

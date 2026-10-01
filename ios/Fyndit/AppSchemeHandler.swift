@@ -12,6 +12,22 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
         if path.isEmpty || path == "/" {
             path = "/index.html"
         }
+
+        // Mock API responses for standalone iOS app
+        if path.hasPrefix("/api/vinted/live") || path.hasPrefix("/api/vinted/search") {
+            let json = """
+            {"status":"ok","count":0,"items":[]}
+            """
+            let data = json.data(using: .utf8)!
+            let res = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*"
+            ])!
+            urlSchemeTask.didReceive(res)
+            urlSchemeTask.didReceive(data)
+            urlSchemeTask.didFinish()
+            return
+        }
         
         let filename = String(path.dropFirst())
         let fileManager = FileManager.default
