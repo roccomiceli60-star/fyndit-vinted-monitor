@@ -2,6 +2,7 @@ import express, { Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { calculateMarketValuation } from './src/utils/marketValuation.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +23,8 @@ export interface VintedItem {
   price: number;
   marketValue: number;
   discountPercent: number;
+  potentialProfit?: number;
+  resellNotes?: string;
   seller: {
     username: string;
     rating: number;
@@ -43,7 +46,7 @@ const seenItemIds = new Set<string>();
 let sessionCookieHeader = '';
 let lastCookieFetch = 0;
 
-// Set of active Server-Sent Events clients for instant zero-latency push
+// Set of active Server-Sent Events clients for instant push
 const sseClients = new Set<Response>();
 
 function broadcastNewItems(newItems: VintedItem[]) {
@@ -64,33 +67,7 @@ function broadcastNewItems(newItems: VintedItem[]) {
   }
 }
 
-// Estimate resell market value
-function estimateMarketValue(brand: string, price: number, title: string): number {
-  const lowerBrand = brand.toLowerCase();
-  const lowerTitle = title.toLowerCase();
-
-  let multiplier = 2.4;
-  if (lowerBrand.includes('trapstar')) {
-    multiplier = lowerTitle.includes('tracksuit') || lowerTitle.includes('tuta') ? 2.8 : 2.4;
-  } else if (lowerBrand.includes('corteiz')) {
-    multiplier = 2.5;
-  } else if (lowerBrand.includes('nike') || lowerBrand.includes('jordan')) {
-    multiplier = lowerTitle.includes('dunk') || lowerTitle.includes('jordan') ? 2.6 : 2.2;
-  } else if (lowerBrand.includes('ralph lauren')) {
-    multiplier = 2.5;
-  } else if (lowerBrand.includes('carhartt')) {
-    multiplier = lowerTitle.includes('detroit') || lowerTitle.includes('jacket') ? 3.0 : 2.2;
-  } else if (lowerBrand.includes('stussy')) {
-    multiplier = 2.6;
-  } else if (lowerBrand.includes('stone island')) {
-    multiplier = 2.2;
-  }
-
-  const estimated = Math.max(price * multiplier, price + 15);
-  return Number(estimated.toFixed(2));
-}
-
-// Parse clean size and condition
+// Parse clean size and condition from Vinted box
 function parseSizeAndCondition(secondLine?: string): { size: string; condition: string } {
   if (!secondLine) return { size: 'M', condition: 'Ottime condizioni' };
   const parts = secondLine.split('·').map((p) => p.trim());
@@ -116,7 +93,7 @@ function parseSizeAndCondition(secondLine?: string): { size: string; condition: 
   return { size, condition };
 }
 
-// Fetch session cookies from Vinted
+// Fetch fresh session cookies from Vinted
 async function refreshVintedSession(): Promise<string> {
   const now = Date.now();
   if (sessionCookieHeader && now - lastCookieFetch < 25 * 60 * 1000) {
@@ -154,9 +131,11 @@ async function refreshVintedSession(): Promise<string> {
   }
 }
 
-// Fetch items from Vinted API
+// Fetch items from Vinted API strictly ordered by newest_first (Appena pubblicati)
 async function fetchFromVinted(searchText = '', perPage = 25): Promise<any[]> {
   const cookies = await refreshVintedSession();
+  
+  // Strictly enforce order=newest_first for real newly published drops
   const url = `https://api.vinted.it/svc-catalogue/items?search_text=${encodeURIComponent(
     searchText
   )}&page=1&per_page=${perPage}&order=newest_first`;
@@ -182,14 +161,15 @@ async function fetchFromVinted(searchText = '', perPage = 25): Promise<any[]> {
   return json.items || [];
 }
 
-// Transform raw Vinted item
+// Transform raw Vinted item with realistic market valuation
 function transformVintedItem(raw: any): VintedItem {
   const price = parseFloat(raw.price?.amount || '25.00');
   const brand = raw.item_box?.first_line || 'Brand';
   const title = raw.title || 'Articolo Vinted';
-  const marketVal = estimateMarketValue(brand, price, title);
-  const discount = Math.min(85, Math.max(30, Math.round(((marketVal - price) / marketVal) * 100)));
   const { size, condition } = parseSizeAndCondition(raw.item_box?.second_line);
+
+  // Calculate high-accuracy realistic market valuation
+  const valuation = calculateMarketValuation(brand, price, title, condition);
 
   let img = 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80';
   if (raw.photo) {
@@ -215,8 +195,10 @@ function transformVintedItem(raw: any): VintedItem {
     size,
     condition,
     price,
-    marketValue: marketVal,
-    discountPercent: discount,
+    marketValue: valuation.marketValue,
+    discountPercent: valuation.discountPercent,
+    potentialProfit: valuation.potentialProfit,
+    resellNotes: valuation.notes,
     seller: {
       username: raw.user?.login || 'utente_vinted',
       rating: 4.8 + ((Math.abs(raw.id || 0) % 3) / 10),
@@ -227,14 +209,14 @@ function transformVintedItem(raw: any): VintedItem {
     imageUrl: img,
     vintedUrl: raw.url?.startsWith('http') ? raw.url : `https://www.vinted.it${raw.url || ''}`,
     publishedSecondsAgo: 1,
-    dealScore: discount >= 50 ? 'STEAL' : 'DEAL',
+    dealScore: valuation.dealScore,
     likesCount: raw.favourite_count || 0,
     discoveredAt: Date.now(),
     isNewDrop: true,
   };
 }
 
-// Processing cycle for incoming items in background
+// Background ingestion cycle
 function ingestRawItems(items: any[]): VintedItem[] {
   const transformed = items.map(transformVintedItem);
   const brandNew: VintedItem[] = [];
@@ -254,14 +236,14 @@ function ingestRawItems(items: any[]): VintedItem[] {
   return brandNew;
 }
 
-// Micro-Worker 1: General newest drops
+// Micro-Worker 1: General newest drops (Highest priority)
 async function runGeneralWorker() {
   while (true) {
     try {
       const raw = await fetchFromVinted('', 25);
       ingestRawItems(raw);
     } catch {
-      // transient error, continue
+      // transient network error, retry
     }
     await new Promise((r) => setTimeout(r, 1600));
   }
@@ -299,7 +281,7 @@ setTimeout(runBrandWorker, 800);
 // API Routes
 
 // 1. SSE Stream: Pushes new items the millisecond they are detected
-app.get('/api/vinted/stream', (req, res) => {
+app.get('/api/vinted/stream', (_req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -325,7 +307,7 @@ app.get('/api/vinted/stream', (req, res) => {
     }
   }, 10000);
 
-  req.on('close', () => {
+  _req.on('close', () => {
     clearInterval(pingInterval);
     sseClients.delete(res);
   });
@@ -337,23 +319,22 @@ app.get('/api/vinted/live', async (req, res) => {
   const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
   const brand = typeof req.query.brand === 'string' ? req.query.brand.trim().toLowerCase() : '';
   const maxPrice = req.query.max_price ? parseFloat(req.query.max_price as string) : null;
+  const minPrice = req.query.min_price ? parseFloat(req.query.min_price as string) : null;
 
   let results: VintedItem[] = [];
 
-  // If user searched for a specific keyword or brand
+  // When user searches for a specific keyword or brand
   if (search || (brand && brand !== 'tutti')) {
-    // Construct optimal Vinted search term
     let effectiveQuery = search;
     if (brand && brand !== 'tutti') {
       effectiveQuery = search ? `${brand} ${search}`.trim() : brand;
     }
 
     try {
-      // Always fetch directly from live Vinted catalog
+      // Always fetch directly from live Vinted catalog (order=newest_first)
       const rawItems = await fetchFromVinted(effectiveQuery, 30);
       const transformed = rawItems.map(transformVintedItem);
 
-      // Save into cache for future lookups
       for (const it of transformed) {
         if (!seenItemIds.has(it.id)) {
           seenItemIds.add(it.id);
@@ -361,7 +342,7 @@ app.get('/api/vinted/live', async (req, res) => {
         }
       }
       results = transformed;
-    } catch (err) {
+    } catch {
       // Fallback to cache matches
       results = realItemsCache.filter((item) => {
         const matchesSearch = !search || item.title.toLowerCase().includes(search) || item.brand.toLowerCase().includes(search);
@@ -370,16 +351,18 @@ app.get('/api/vinted/live', async (req, res) => {
       });
     }
   } else {
-    // No search: return latest items from cache
     results = [...realItemsCache];
   }
 
-  // Filter by brand if results contain multiple
+  // Filter by brand if specified
   if (brand && brand !== 'tutti') {
     results = results.filter((item) => item.brand.toLowerCase().includes(brand));
   }
 
-  // Filter by maxPrice only if specified
+  // Filter by min/max price
+  if (minPrice && !isNaN(minPrice) && minPrice > 0) {
+    results = results.filter((item) => item.price >= minPrice);
+  }
   if (maxPrice && !isNaN(maxPrice) && maxPrice > 0) {
     results = results.filter((item) => item.price <= maxPrice);
   }
@@ -408,7 +391,8 @@ app.get('/api/vinted/status', (_req, res) => {
     activeStreamListeners: sseClients.size,
     sessionActive: Boolean(sessionCookieHeader),
     lastCookieUpdate: new Date(lastCookieFetch).toISOString(),
-    sniperMode: 'LIVE_SEARCH_ENHANCED_V2',
+    valuationEngine: 'STREETWEAR_LUXURY_TIER_V2',
+    order: 'NEWEST_FIRST',
   });
 });
 

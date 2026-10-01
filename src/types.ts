@@ -30,6 +30,8 @@ export interface VintedListing {
   likesCount: number;
   isNewDrop?: boolean;
   discoveredAt?: number;
+  potentialProfit?: number;
+  resellNotes?: string;
 }
 
 export interface VintedMonitor {
