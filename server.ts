@@ -207,20 +207,17 @@ async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): P
   return strictlyFresh;
 }
 
-// Transform raw Vinted item: price includes Vinted buyer protection (Protezione Acquisti)
+// Transform raw Vinted item: exact seller price without buyer protection
 function transformVintedItem(raw: any): VintedItem {
-  let price = 26.95;
-  if (raw.total_item_price?.amount) {
-    const val = parseFloat(raw.total_item_price.amount);
+  let price = 15.00;
+  if (raw.price?.amount != null) {
+    const val = parseFloat(String(raw.price.amount));
     if (!isNaN(val) && val > 0) price = Number(val.toFixed(2));
-  } else if (raw.price?.amount && raw.service_fee?.amount) {
-    const p = parseFloat(raw.price.amount);
-    const fee = parseFloat(raw.service_fee.amount);
-    if (!isNaN(p) && !isNaN(fee)) price = Number((p + fee).toFixed(2));
-  } else if (raw.price?.amount) {
-    const base = parseFloat(raw.price.amount);
-    // Official Vinted Buyer Protection fee: 0.70€ + 5%
-    price = Number((base + 0.70 + (base * 0.05)).toFixed(2));
+  } else if (typeof raw.price === 'number') {
+    price = Number(raw.price.toFixed(2));
+  } else if (typeof raw.price === 'string') {
+    const val = parseFloat(raw.price.replace(',', '.'));
+    if (!isNaN(val) && val > 0) price = Number(val.toFixed(2));
   }
   const brand = raw.item_box?.first_line || 'Vinted';
   const title = raw.title || 'Articolo Vinted';

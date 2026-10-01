@@ -25,7 +25,10 @@ import {
   Cat,
   Layers,
   CheckCircle2,
-  ArrowUpDown
+  ArrowUpDown,
+  LayoutGrid,
+  Rows,
+  RefreshCw
 } from 'lucide-react';
 import { VintedListing } from '../types';
 import { 
@@ -44,6 +47,10 @@ interface LiveFeedViewProps {
   onFilterChange: (search: string, brand: string) => void;
   currentSearch?: string;
   currentBrand?: string;
+  autoRefreshEnabled?: boolean;
+  onToggleAutoRefresh?: () => void;
+  onManualRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
@@ -52,7 +59,14 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   onFilterChange,
   currentSearch = '',
   currentBrand = 'Tutti',
+  autoRefreshEnabled = true,
+  onToggleAutoRefresh,
+  onManualRefresh,
+  isRefreshing = false,
 }) => {
+  // Grid layout mode: '2' = 2 per row on iPhone/mobile, '1' = 1 per row
+  const [gridColumns, setGridColumns] = useState<'1' | '2'>('2');
+
   // Search state
   const [searchInput, setSearchInput] = useState(currentSearch);
   
@@ -967,6 +981,67 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             <span>Nuovi drop (&lt; 20 min)</span>
           </button>
 
+          {/* 11. Auto-Refresh in Tempo Reale Control */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            {onToggleAutoRefresh && (
+              <button
+                type="button"
+                onClick={onToggleAutoRefresh}
+                className={`px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-all text-xs font-bold ${
+                  autoRefreshEnabled
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-500/10'
+                    : 'bg-zinc-950 text-zinc-400 border-zinc-700 hover:border-zinc-500'
+                }`}
+                title="Attiva/Disattiva aggiornamento in tempo reale automatico"
+              >
+                <span className={`w-2 h-2 rounded-full ${autoRefreshEnabled ? 'bg-emerald-400 animate-ping' : 'bg-zinc-600'}`} />
+                <span>Auto-Refresh {autoRefreshEnabled ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
+
+            {onManualRefresh && (
+              <button
+                type="button"
+                onClick={onManualRefresh}
+                disabled={isRefreshing}
+                className="p-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700/80 transition-colors"
+                title="Aggiorna ora annunci da Vinted"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-[#09B1BA]' : ''}`} />
+              </button>
+            )}
+
+            {/* 12. Grid Columns Mode: 1 o 2 per riga su iPhone */}
+            <div className="flex items-center gap-0.5 bg-zinc-950 p-0.5 rounded-full border border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setGridColumns('1')}
+                className={`px-2 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 transition-all ${
+                  gridColumns === '1'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                title="1 annuncio per riga"
+              >
+                <Rows className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">1x</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGridColumns('2')}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-black flex items-center gap-1 transition-all ${
+                  gridColumns === '2'
+                    ? 'bg-[#09B1BA] text-zinc-950 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                title="2 annunci per riga su iPhone"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>2 per riga</span>
+              </button>
+            </div>
+          </div>
+
         </div>
 
         {/* Active Filter Chips (1 to 1 with Vinted active filter tags) */}
@@ -1136,14 +1211,18 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
         </div>
       )}
 
-      {/* Listings Grid: Enhanced Vinted Card with Realistic Market Valuation */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* Listings Grid: Compact and Responsive (supports 2 per row on iPhone) */}
+      <div className={`grid ${
+        gridColumns === '2'
+          ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3'
+          : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4'
+      }`}>
         {displayedListings.map((item) => (
           <div
             key={item.id}
-            className={`group rounded-2xl bg-zinc-900 border transition-all duration-200 overflow-hidden flex flex-col hover:shadow-2xl hover:shadow-[#09B1BA]/10 ${
+            className={`group rounded-xl bg-zinc-900 border transition-all duration-200 overflow-hidden flex flex-col hover:shadow-xl hover:shadow-[#09B1BA]/10 ${
               item.isNewDrop 
-                ? 'border-emerald-500/90 ring-2 ring-emerald-500/40 shadow-xl shadow-emerald-500/15' 
+                ? 'border-emerald-500/80 ring-1 sm:ring-2 ring-emerald-500/30' 
                 : 'border-zinc-800/80 hover:border-[#09B1BA]/50'
             }`}
           >
@@ -1152,7 +1231,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
               href={item.vintedUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="relative aspect-[4/3] bg-zinc-950 overflow-hidden block cursor-pointer group/img"
+              className="relative aspect-square sm:aspect-[4/3] bg-zinc-950 overflow-hidden block cursor-pointer group/img"
               title="Vedi su Vinted"
             >
               <img
@@ -1172,71 +1251,66 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 loading="lazy"
               />
               {/* Status Badges */}
-              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
+              <div className="absolute top-1.5 left-1.5 flex items-center gap-1 flex-wrap">
                 {item.isNewDrop && (
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500 text-zinc-950 text-[10px] font-black uppercase tracking-wider animate-pulse flex items-center gap-1 shadow-lg shadow-emerald-500/30">
-                    <Zap className="w-3.5 h-3.5 fill-zinc-950" /> APPENA PUBBLICATO
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-zinc-950 text-[8px] sm:text-[9px] font-black uppercase tracking-wider animate-pulse flex items-center gap-0.5 shadow-md">
+                    <Zap className="w-2.5 h-2.5 fill-zinc-950" /> DROP
                   </span>
                 )}
               </div>
 
               {/* Publication Timestamp Badge */}
-              <div className="absolute top-2.5 right-2.5">
-                <span className="px-2 py-0.5 rounded-lg bg-zinc-950/85 backdrop-blur text-[11px] font-bold text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
+              <div className="absolute top-1.5 right-1.5">
+                <span className="px-1.5 py-0.5 rounded bg-zinc-950/85 backdrop-blur text-[9px] sm:text-[10px] font-bold text-emerald-400 border border-emerald-500/30 flex items-center gap-0.5">
+                  <Clock className="w-2.5 h-2.5" />
                   {formatTimeAgo(item.publishedSecondsAgo)}
                 </span>
               </div>
 
               {/* Condition & Size pill */}
-              <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-medium text-zinc-200 bg-zinc-950/80 backdrop-blur px-2.5 py-1 rounded-lg border border-zinc-800/60">
-                <span className="truncate max-w-[130px]">{item.condition}</span>
-                <span className="font-bold text-[#09B1BA]">Taglia {item.size}</span>
+              <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between text-[9px] sm:text-[10px] font-medium text-zinc-200 bg-zinc-950/80 backdrop-blur px-1.5 py-0.5 rounded border border-zinc-800/60">
+                <span className="truncate max-w-[80px] sm:max-w-[120px]">{item.condition}</span>
+                <span className="font-bold text-[#09B1BA] truncate">{item.size}</span>
               </div>
             </a>
 
             {/* Content Details */}
-            <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+            <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between space-y-1.5 sm:space-y-2">
               <div>
-                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
-                  <span className="font-extrabold uppercase tracking-wider text-[#09B1BA]">{item.brand}</span>
-                  <span className="flex items-center gap-1 text-[11px]">
-                    {item.seller.countryFlag} {item.seller.username}
+                <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-0.5">
+                  <span className="font-extrabold uppercase tracking-wider text-[#09B1BA] truncate max-w-[110px]">{item.brand}</span>
+                  <span className="flex items-center gap-0.5 text-[9px] sm:text-[10px] text-zinc-400 shrink-0">
+                    {item.seller.countryFlag}
                     <span className="text-amber-400 font-bold flex items-center">
-                      <Star className="w-3 h-3 fill-amber-400 inline" /> {item.seller.rating}
+                      <Star className="w-2.5 h-2.5 fill-amber-400 inline" /> {item.seller.rating}
                     </span>
                   </span>
                 </div>
-                <h3 className="font-semibold text-zinc-100 text-sm line-clamp-2 leading-snug group-hover:text-[#09B1BA] transition-colors">
+                <h3 className="font-semibold text-zinc-100 text-[11px] sm:text-xs line-clamp-1 leading-snug group-hover:text-[#09B1BA] transition-colors" title={item.title}>
                   {item.title}
                 </h3>
               </div>
 
-              {/* Solo Prezzo Vinted (con Protezione Acquisti) */}
-              <div className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800/90 flex items-center justify-between">
-                <div>
-                  <span className="text-xs uppercase font-extrabold text-zinc-400 tracking-wider block">
-                    Prezzo Vinted
-                  </span>
-                  <span className="text-[10px] text-zinc-500 font-medium">
-                    con Protezione acquisti
-                  </span>
-                </div>
-                <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
+              {/* Solo Prezzo Vinted (Senza Protezione) */}
+              <div className="p-1.5 sm:p-2 rounded-lg bg-zinc-950/90 border border-zinc-800/80 flex items-center justify-between">
+                <span className="text-[9px] sm:text-[10px] uppercase font-extrabold text-zinc-400 tracking-wider">
+                  Prezzo Vinted
+                </span>
+                <span className="text-sm sm:text-base font-black text-emerald-400 font-mono tracking-tight">
                   €{item.price.toFixed(2)}
                 </span>
               </div>
 
               {/* Compra su Vinted Button */}
-              <div className="pt-1">
+              <div className="pt-0.5">
                 <a
                   href={item.vintedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-3 px-4 rounded-xl bg-[#09B1BA] hover:bg-[#079aa2] text-zinc-950 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md shadow-[#09B1BA]/20 active:scale-95 cursor-pointer"
+                  className="w-full py-1.5 sm:py-2 px-2 rounded-lg bg-[#09B1BA] hover:bg-[#079aa2] text-zinc-950 font-black text-[10px] sm:text-xs uppercase tracking-wide flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm shadow-[#09B1BA]/20 cursor-pointer text-center"
                 >
-                  <Zap className="w-4 h-4 fill-zinc-950" />
-                  COMPRA SU VINTED
+                  <Zap className="w-3 h-3 fill-zinc-950 shrink-0" />
+                  <span className="truncate">COMPRA SU VINTED</span>
                 </a>
               </div>
 

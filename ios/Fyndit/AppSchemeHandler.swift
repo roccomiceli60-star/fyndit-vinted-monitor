@@ -280,23 +280,8 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                     let idNum = raw["id"] as? Int ?? 0
                     let title = raw["title"] as? String ?? "Articolo Vinted"
                     let priceDict = raw["price"] as? [String: Any]
-                    let priceStr = priceDict?["amount"] as? String ?? "25.00"
-                    let basePrice = Double(priceStr) ?? 25.0
-
-                    // Official Vinted Buyer Protection price as displayed on Vinted feed
-                    var price: Double
-                    if let totalDict = raw["total_item_price"] as? [String: Any],
-                       let totalStr = totalDict["amount"] as? String,
-                       let totalVal = Double(totalStr), totalVal > 0 {
-                        price = Double(round(totalVal * 100) / 100)
-                    } else if let feeDict = raw["service_fee"] as? [String: Any],
-                              let feeStr = feeDict["amount"] as? String,
-                              let feeVal = Double(feeStr) {
-                        price = Double(round((basePrice + feeVal) * 100) / 100)
-                    } else {
-                        // Official Vinted Buyer Protection formula: 0.70€ + 5%
-                        price = Double(round((basePrice + 0.70 + (basePrice * 0.05)) * 100) / 100)
-                    }
+                    let priceStr = priceDict?["amount"] as? String ?? "15.00"
+                    let price = Double(priceStr) ?? 15.0
 
                     let itemBox = raw["item_box"] as? [String: Any]
                     let brandName = itemBox?["first_line"] as? String ?? "Vinted"

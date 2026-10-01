@@ -23,6 +23,8 @@ export default function App() {
   const [activeBrand, setActiveBrand] = useState<string>('Tutti');
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [turboMode, setTurboMode] = useState<boolean>(true);
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const seenIdsRef = useRef<Set<string>>(new Set());
   const activeSearchRef = useRef<string>('');
@@ -128,48 +130,47 @@ export default function App() {
   }, [handleIncomingDrops]);
 
   // Active real-time drop poller for standalone iOS & live feed
-  useEffect(() => {
-    if (isSseConnectedRef.current) return;
-
-    let isPolling = false;
-    const fetchLiveRealtimeDrops = async () => {
-      if (isPolling) return;
-      isPolling = true;
-      try {
-        const url = new URL('/api/vinted/live', window.location.origin);
-        if (activeSearchRef.current) {
-          url.searchParams.set('search', activeSearchRef.current);
-        }
-        if (activeBrandRef.current && activeBrandRef.current !== 'Tutti') {
-          url.searchParams.set('brand', activeBrandRef.current);
-        }
-
-        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6000) });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.items && Array.isArray(data.items) && data.items.length > 0) {
-            handleIncomingDrops(data.items);
-            setLatencyMs(Math.max(1, data.latencyMs || 2));
-            return;
-          }
-        }
-      } catch {
-        // Fallback to fresh continuous drops
-        const nextDrop = generateNextAutonomousDrop();
-        handleIncomingDrops([nextDrop]);
-      } finally {
-        isPolling = false;
+  const fetchLiveRealtimeDrops = useCallback(async (manual = false) => {
+    if (manual) setIsRefreshing(true);
+    try {
+      const url = new URL('/api/vinted/live', window.location.origin);
+      if (activeSearchRef.current) {
+        url.searchParams.set('search', activeSearchRef.current);
       }
-    };
+      if (activeBrandRef.current && activeBrandRef.current !== 'Tutti') {
+        url.searchParams.set('brand', activeBrandRef.current);
+      }
 
-    // Immediate initial fetch
-    fetchLiveRealtimeDrops();
+      const res = await fetch(url.toString(), { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+          handleIncomingDrops(data.items);
+          setLatencyMs(Math.max(1, data.latencyMs || 2));
+        }
+      }
+    } catch {
+      // Fallback to fresh continuous drops
+      const nextDrop = generateNextAutonomousDrop();
+      handleIncomingDrops([nextDrop]);
+    } finally {
+      if (manual) setTimeout(() => setIsRefreshing(false), 400);
+    }
+  }, [handleIncomingDrops]);
 
-    const intervalMs = turboMode ? 2000 : 3500;
-    const interval = setInterval(fetchLiveRealtimeDrops, intervalMs);
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    // Immediate fetch
+    fetchLiveRealtimeDrops(false);
+
+    // Guaranteed real-time 1.8s pulse interval
+    const interval = setInterval(() => {
+      fetchLiveRealtimeDrops(false);
+    }, 1800);
 
     return () => clearInterval(interval);
-  }, [turboMode, handleIncomingDrops]);
+  }, [autoRefresh, fetchLiveRealtimeDrops]);
 
   // Refresh publishedSecondsAgo counters
   useEffect(() => {
@@ -316,6 +317,10 @@ export default function App() {
             onFilterChange={executeSearch}
             currentSearch={activeSearch}
             currentBrand={activeBrand}
+            autoRefreshEnabled={autoRefresh}
+            onToggleAutoRefresh={() => setAutoRefresh(!autoRefresh)}
+            onManualRefresh={() => fetchLiveRealtimeDrops(true)}
+            isRefreshing={isRefreshing}
           />
         )}
 
