@@ -37,6 +37,8 @@ export interface VintedListing {
 export interface VintedMonitor {
   id: string;
   name: string;
+  category?: string;
+  subcategories?: string[];
   brands: string[];
   keywords: string[];
   excludedKeywords: string[];

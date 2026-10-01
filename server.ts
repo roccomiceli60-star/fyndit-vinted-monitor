@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { calculateMarketValuation } from './src/utils/marketValuation.ts';
+import { detectCategory } from './src/data/vintedCategories.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -248,7 +249,7 @@ function transformVintedItem(raw: any): VintedItem {
     rawId: raw.id || 0,
     title,
     brand,
-    category: 'Abbigliamento & Streetwear',
+    category: detectCategory(title, brand, raw.item_box?.second_line),
     size,
     condition,
     price,
@@ -310,15 +311,20 @@ async function runGeneralWorker() {
   }
 }
 
-// Micro-Worker 2: Monitored Brands rotation
+// Micro-Worker 2: Monitored Hyped Categories & Brands rotation
 const SNIPER_QUERIES = [
+  'pokemon tcg',
   'trapstar',
+  'ps5',
   'corteiz',
+  'lego star wars',
   'nike dunk',
+  'airpods',
   'ralph lauren',
-  'carhartt detroit',
-  'stussy 8 ball',
   'stone island',
+  'carhartt detroit',
+  'nintendo switch',
+  'stussy 8 ball',
 ];
 let queryIdx = 0;
 

@@ -244,7 +244,62 @@ export function calculateMarketValuation(
     }
   }
 
-  // 10. FAST FASHION (Zara, Shein, Bershka, H&M, Primark, Pull&Bear, Stradivarius)
+  // 10. ENTERTAINMENT, GAMING & TCG (POKÉMON, PS5, SWITCH)
+  else if (
+    brand.includes('pokemon') ||
+    brand.includes('pokémon') ||
+    brand.includes('nintendo') ||
+    brand.includes('playstation') ||
+    brand.includes('sony') ||
+    text.includes('pokemon') ||
+    text.includes('pokémon') ||
+    text.includes('charizard') ||
+    text.includes('ps5') ||
+    text.includes('switch') ||
+    text.includes('xbox') ||
+    text.includes('lego')
+  ) {
+    tier = 'CONTEMPORARY';
+    if (text.includes('ps5') || text.includes('playstation 5')) {
+      estimatedRetailOrResell = text.includes('gioco') || text.includes('game') ? 55 : 420;
+      notes = text.includes('gioco') ? 'Videogioco PS5 recente' : 'Console PlayStation 5';
+    } else if (text.includes('switch')) {
+      estimatedRetailOrResell = text.includes('gioco') || text.includes('game') ? 45 : 220;
+      notes = text.includes('gioco') ? 'Videogioco Nintendo Switch' : 'Console Nintendo Switch';
+    } else if (text.includes('charizard') || text.includes('booster') || text.includes('bundle') || text.includes('box')) {
+      estimatedRetailOrResell = Math.max(price * 1.8, 85);
+      notes = 'Carte TCG Pokémon / Booster Box ricercato';
+    } else if (text.includes('lego')) {
+      estimatedRetailOrResell = Math.max(price * 1.7, 45);
+      notes = 'Set LEGO collezionabile';
+    } else {
+      estimatedRetailOrResell = Math.max(price * 1.6, price + 15);
+      notes = 'Articolo Entertainment / Gaming';
+    }
+  }
+
+  // 11. AUDIO & SMARTPHONE TECH (Apple AirPods, iPhone, etc.)
+  else if (brand.includes('apple') || text.includes('airpods') || text.includes('iphone') || text.includes('dyson')) {
+    tier = 'CONTEMPORARY';
+    if (text.includes('airpods max')) {
+      estimatedRetailOrResell = 450;
+      notes = 'Cuffie Apple AirPods Max';
+    } else if (text.includes('airpods pro') || text.includes('airpods')) {
+      estimatedRetailOrResell = 170;
+      notes = 'Auricolari wireless Apple AirPods';
+    } else if (text.includes('iphone')) {
+      estimatedRetailOrResell = Math.max(price * 1.5, 300);
+      notes = 'Smartphone Apple iPhone';
+    } else if (text.includes('dyson')) {
+      estimatedRetailOrResell = 320;
+      notes = 'Dispositivo Dyson';
+    } else {
+      estimatedRetailOrResell = Math.max(price * 1.5, price + 25);
+      notes = 'Dispositivo Tech di marca';
+    }
+  }
+
+  // 12. FAST FASHION (Zara, Shein, Bershka, H&M, Primark, Pull&Bear, Stradivarius)
   else if (
     brand.includes('zara') ||
     brand.includes('shein') ||
