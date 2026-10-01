@@ -49,7 +49,7 @@ jobs:
             -framework Foundation \
             -O -whole-module-optimization \
             -o Fyndit \
-            ios/Fyndit/AppDelegate.swift ios/Fyndit/ViewController.swift
+            ios/Fyndit/AppDelegate.swift ios/Fyndit/ViewController.swift ios/Fyndit/AppSchemeHandler.swift
             
           file Fyndit
           echo "✓ Native ARM64 binary compiled successfully!"
@@ -65,7 +65,8 @@ jobs:
           # Copy Info.plist
           cp ios/Fyndit/Info.plist Payload/Fyndit.app/Info.plist
           
-          # Copy web dist assets
+          # Copy web dist assets to both root and www
+          cp -r dist/* Payload/Fyndit.app/
           cp -r dist/* Payload/Fyndit.app/www/
           
           # Copy app icons if present
