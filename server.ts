@@ -207,9 +207,21 @@ async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): P
   return strictlyFresh;
 }
 
-// Transform raw Vinted item with realistic market valuation
+// Transform raw Vinted item: price includes Vinted buyer protection (Protezione Acquisti)
 function transformVintedItem(raw: any): VintedItem {
-  const price = parseFloat(raw.price?.amount || '25.00');
+  let price = 26.95;
+  if (raw.total_item_price?.amount) {
+    const val = parseFloat(raw.total_item_price.amount);
+    if (!isNaN(val) && val > 0) price = Number(val.toFixed(2));
+  } else if (raw.price?.amount && raw.service_fee?.amount) {
+    const p = parseFloat(raw.price.amount);
+    const fee = parseFloat(raw.service_fee.amount);
+    if (!isNaN(p) && !isNaN(fee)) price = Number((p + fee).toFixed(2));
+  } else if (raw.price?.amount) {
+    const base = parseFloat(raw.price.amount);
+    // Official Vinted Buyer Protection fee: 0.70€ + 5%
+    price = Number((base + 0.70 + (base * 0.05)).toFixed(2));
+  }
   const brand = raw.item_box?.first_line || 'Vinted';
   const title = raw.title || 'Articolo Vinted';
   const { size, condition } = parseSizeAndCondition(raw.item_box?.second_line);

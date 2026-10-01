@@ -1212,11 +1212,16 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 </h3>
               </div>
 
-              {/* Solo Prezzo Vinted */}
+              {/* Solo Prezzo Vinted (con Protezione Acquisti) */}
               <div className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800/90 flex items-center justify-between">
-                <span className="text-xs uppercase font-extrabold text-zinc-400 tracking-wider">
-                  Prezzo Vinted
-                </span>
+                <div>
+                  <span className="text-xs uppercase font-extrabold text-zinc-400 tracking-wider block">
+                    Prezzo Vinted
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-medium">
+                    con Protezione acquisti
+                  </span>
+                </div>
                 <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
                   €{item.price.toFixed(2)}
                 </span>
