@@ -1240,11 +1240,11 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                  if (!target.dataset.triedProxy && item.imageUrl.startsWith('http')) {
+                  if (!target.dataset.triedProxy && item.imageUrl && item.imageUrl.startsWith('http')) {
                     target.dataset.triedProxy = 'true';
                     target.src = `/api/image-proxy?url=${encodeURIComponent(item.imageUrl)}`;
                   } else {
-                    target.src = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=400&q=80';
+                    target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="%2318181b"/><circle cx="150" cy="125" r="32" fill="%2327272a"/><path d="M70 230c0-40 35-60 80-60s80 20 80 60" fill="%2327272a"/><text x="150" y="270" fill="%2371717a" font-size="14" font-family="sans-serif" text-anchor="middle" font-weight="bold">Foto Vinted</text></svg>';
                   }
                 }}
                 className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300 bg-zinc-950"

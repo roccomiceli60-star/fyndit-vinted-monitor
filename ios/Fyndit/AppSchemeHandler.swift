@@ -287,8 +287,8 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                     let brandName = itemBox?["first_line"] as? String ?? "Vinted"
                     let secondLine = itemBox?["second_line"] as? String ?? "M / Ottime condizioni"
 
-                    // Extract image
-                    var imgUrl = "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=400&q=80"
+                    // Extract real verified image from Vinted
+                    var imgUrl = ""
                     if let photo = raw["photo"] as? [String: Any] {
                         if let thumbs = photo["thumbnails"] as? [[String: Any]], let last = thumbs.last, let u = last["url"] as? String {
                             imgUrl = u
@@ -299,6 +299,11 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                         if let u = first["url"] as? String ?? first["full_size_url"] as? String {
                             imgUrl = u
                         }
+                    }
+
+                    // Only include items with genuine real photos from Vinted
+                    guard !imgUrl.isEmpty else {
+                        continue
                     }
 
                     let rawUrl = raw["url"] as? String ?? "/items/\(idNum)"

@@ -150,9 +150,7 @@ export default function App() {
         }
       }
     } catch {
-      // Fallback to fresh continuous drops
-      const nextDrop = generateNextAutonomousDrop();
-      handleIncomingDrops([nextDrop]);
+      // Silent retry on next 1s interval - never inject fake random drops
     } finally {
       if (manual) setTimeout(() => setIsRefreshing(false), 400);
     }

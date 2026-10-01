@@ -191,12 +191,19 @@ async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): P
     }
   }
 
-  // Filter out promoted/bumped items; only filter idDelta on generic drops
+  // Filter out promoted/bumped items and items without genuine photos
   const strictlyFresh = rawItems.filter((it: any) => {
     // 1. Exclude paid bumps/promoted items
     if (it.promoted === true) return false;
+
+    // 2. Only include items with genuine verified photos from Vinted
+    const hasPhoto = Boolean(
+      (it.photo && (it.photo.url || it.photo.full_size_url || (Array.isArray(it.photo.thumbnails) && it.photo.thumbnails.length > 0))) ||
+      (Array.isArray(it.photos) && it.photos.length > 0 && (it.photos[0].url || it.photos[0].full_size_url))
+    );
+    if (!hasPhoto) return false;
     
-    // 2. Exclude old IDs only during general sniper feed, never on explicit searches
+    // 3. Exclude old IDs only during general sniper feed, never on explicit searches
     if (!searchText.trim() && highestSeenRawId > 0 && it.id && typeof it.id === 'number') {
       const idDelta = highestSeenRawId - it.id;
       if (idDelta > 45000) return false;
@@ -240,7 +247,10 @@ function transformVintedItem(raw: any): VintedItem {
     img = p.url || p.full_size_url || (Array.isArray(p.thumbnails) && p.thumbnails[0]?.url) || '';
   }
   if (!img) {
-    img = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=400&q=80';
+    if ((global as any).__noImgDebug == null) (global as any).__noImgDebug = [];
+    (global as any).__noImgDebug.push({ id: raw.id, title: raw.title, photo: raw.photo, photos: raw.photos, item_box: raw.item_box, rawKeys: Object.keys(raw) });
+    if ((global as any).__noImgDebug.length > 20) (global as any).__noImgDebug.shift();
+    img = '';
   }
 
   const countries = [
@@ -470,14 +480,17 @@ app.get('/api/vinted/live', async (req, res) => {
   });
 });
 
-// Fast In-Memory Image Cache (prevents duplicate fetches and serves images in < 2ms)
+// Fast In-Memory Image Cache (serves images in < 2ms without CDN blocking)
 const imageMemoryCache = new Map<string, { buffer: Buffer; contentType: string; expireAt: number }>();
-const FALLBACK_PLACEHOLDER_URL = 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=400&q=80';
+const NEUTRAL_PLACEHOLDER_SVG = Buffer.from(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="#18181b"/><path d="M115 125a15 15 0 1 0 0-30 15 15 0 0 0 0 30zm55 35l-25-30-35 45h120l-40-52-20 37z" fill="#3f3f46"/><rect x="40" y="40" width="220" height="220" rx="20" fill="none" stroke="#27272a" stroke-width="4"/><text x="150" y="225" fill="#71717a" font-size="14" font-family="system-ui, sans-serif" text-anchor="middle" font-weight="600">Foto Vinted</text></svg>`
+);
 
 app.get('/api/image-proxy', async (req, res) => {
   const imageUrl = req.query.url as string;
   if (!imageUrl || !imageUrl.startsWith('http')) {
-    return res.redirect(302, FALLBACK_PLACEHOLDER_URL);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    return res.send(NEUTRAL_PLACEHOLDER_SVG);
   }
 
   // Check in-memory cache
@@ -499,7 +512,8 @@ app.get('/api/image-proxy', async (req, res) => {
     });
 
     if (!upstream.ok) {
-      return res.redirect(302, FALLBACK_PLACEHOLDER_URL);
+      res.setHeader('Content-Type', 'image/svg+xml');
+      return res.send(NEUTRAL_PLACEHOLDER_SVG);
     }
 
     const contentType = upstream.headers.get('content-type') || 'image/webp';
@@ -520,7 +534,8 @@ app.get('/api/image-proxy', async (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
     res.send(buffer);
   } catch {
-    res.redirect(302, FALLBACK_PLACEHOLDER_URL);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.send(NEUTRAL_PLACEHOLDER_SVG);
   }
 });
 
