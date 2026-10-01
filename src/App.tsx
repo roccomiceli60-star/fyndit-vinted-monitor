@@ -42,15 +42,16 @@ export default function App() {
 
     const searchQ = activeSearchRef.current.toLowerCase().trim();
     const brandQ = activeBrandRef.current === 'Tutti' ? '' : activeBrandRef.current.toLowerCase().trim();
+    const searchWords = searchQ.split(/\s+/).filter(Boolean);
 
     const reallyNew: VintedListing[] = [];
     for (const item of newItems) {
       if (!seenIdsRef.current.has(item.id)) {
         seenIdsRef.current.add(item.id);
-        if (searchQ || brandQ) {
+        if (searchWords.length > 0 || brandQ) {
           const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
-          const matchesSearch = !searchQ || itemText.includes(searchQ);
-          const matchesBrand = !brandQ || item.brand.toLowerCase().includes(brandQ);
+          const matchesSearch = searchWords.length === 0 || searchWords.every((w) => itemText.includes(w));
+          const matchesBrand = !brandQ || item.brand.toLowerCase().includes(brandQ) || item.title.toLowerCase().includes(brandQ);
           if (matchesSearch && matchesBrand) {
             reallyNew.push({ ...item, isNewDrop: true });
           }
@@ -134,23 +135,36 @@ export default function App() {
     if (manual) setIsRefreshing(true);
     try {
       const url = new URL('/api/vinted/live', window.location.origin);
-      if (activeSearchRef.current) {
-        url.searchParams.set('search', activeSearchRef.current);
+      const searchQ = activeSearchRef.current.trim();
+      const brandQ = activeBrandRef.current;
+      if (searchQ) {
+        url.searchParams.set('search', searchQ);
       }
-      if (activeBrandRef.current && activeBrandRef.current !== 'Tutti') {
-        url.searchParams.set('brand', activeBrandRef.current);
+      if (brandQ && brandQ !== 'Tutti') {
+        url.searchParams.set('brand', brandQ);
       }
 
-      const res = await fetch(url.toString(), { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(url.toString(), { 
+        headers: { 'Cache-Control': 'no-cache' },
+        signal: AbortSignal.timeout(4000) 
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+          // If searching or filtering and listings is empty or small, populate immediately
+          setListings((prev) => {
+            if (prev.length === 0 || ((searchQ || (brandQ && brandQ !== 'Tutti')) && prev.length < 5)) {
+              for (const it of data.items) seenIdsRef.current.add(it.id);
+              return data.items;
+            }
+            return prev;
+          });
           handleIncomingDrops(data.items);
           setLatencyMs(Math.max(1, data.latencyMs || 2));
         }
       }
     } catch {
-      // Silent retry on next 1s interval - never inject fake random drops
+      // Silent retry on next interval - never inject fake random drops
     } finally {
       if (manual) setTimeout(() => setIsRefreshing(false), 400);
     }
@@ -162,10 +176,10 @@ export default function App() {
     // Immediate fetch
     fetchLiveRealtimeDrops(false);
 
-    // Guaranteed real-time 1s ultra-fast pulse interval
+    // Guaranteed real-time 750ms ultra-fast pulse interval
     const interval = setInterval(() => {
       fetchLiveRealtimeDrops(false);
-    }, 1000);
+    }, 750);
 
     return () => clearInterval(interval);
   }, [autoRefresh, fetchLiveRealtimeDrops]);
@@ -188,6 +202,7 @@ export default function App() {
     setActiveSearch(search);
     setActiveBrand(brand);
     setIsSearching(true);
+    seenIdsRef.current.clear(); // Clear seen IDs so fresh search results show instantly
     const start = Date.now();
 
     try {
@@ -195,7 +210,10 @@ export default function App() {
       if (search.trim()) url.searchParams.set('search', search.trim());
       if (brand && brand !== 'Tutti') url.searchParams.set('brand', brand);
 
-      const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
+      const res = await fetch(url.toString(), { 
+        headers: { 'Cache-Control': 'no-cache' },
+        signal: AbortSignal.timeout(6000) 
+      });
       if (res.ok) {
         const data = await res.json();
         setLatencyMs(Math.max(1, Date.now() - start));

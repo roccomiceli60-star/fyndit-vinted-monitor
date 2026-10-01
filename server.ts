@@ -392,6 +392,40 @@ const SNIPER_QUERIES = [
 ];
 let queryIdx = 0;
 
+// Dynamic active client search queries (tracked with lastRequested timestamp)
+const activeClientSearchQueries = new Map<string, number>();
+
+export function touchActiveSearch(q: string) {
+  if (!q || !q.trim()) return;
+  activeClientSearchQueries.set(q.trim().toLowerCase(), Date.now());
+}
+
+async function runActiveSearchSniperWorker() {
+  while (true) {
+    const now = Date.now();
+    for (const [q, time] of activeClientSearchQueries.entries()) {
+      if (now - time > 4 * 60 * 1000) {
+        activeClientSearchQueries.delete(q);
+      }
+    }
+
+    const queries = Array.from(activeClientSearchQueries.keys());
+    if (queries.length > 0) {
+      for (const q of queries) {
+        try {
+          const raw = await fetchFromVinted(q, 30);
+          ingestRawItems(raw);
+        } catch {
+          // ignore
+        }
+        await new Promise((r) => setTimeout(r, 450));
+      }
+    } else {
+      await new Promise((r) => setTimeout(r, 600));
+    }
+  }
+}
+
 async function runBrandWorker() {
   while (true) {
     const q = SNIPER_QUERIES[queryIdx % SNIPER_QUERIES.length];
@@ -406,10 +440,11 @@ async function runBrandWorker() {
   }
 }
 
-// Start two interleaved general workers (staggered by 450ms) + brand sniper worker
+// Start two interleaved general workers (staggered by 450ms) + active search sniper + brand sniper worker
 runGeneralWorker(1);
 setTimeout(() => runGeneralWorker(2), 450);
-setTimeout(runBrandWorker, 600);
+setTimeout(runActiveSearchSniperWorker, 600);
+setTimeout(runBrandWorker, 900);
 
 // API Routes
 // 1. SSE Stream: Pushes new items the millisecond they are detected
@@ -465,8 +500,10 @@ app.get('/api/vinted/live', async (req, res) => {
     if (brand && brand !== 'tutti') {
       effectiveQuery = search ? `${brand} ${search}`.trim() : brand;
     }
+    touchActiveSearch(effectiveQuery);
+
     try {
-      const rawItems = await fetchFromVinted(effectiveQuery, 30);
+      const rawItems = await fetchFromVinted(effectiveQuery, 35);
       const transformed = rawItems.map(transformVintedItem);
       for (const it of transformed) {
         if (!seenItemIds.has(it.id)) {
@@ -474,12 +511,31 @@ app.get('/api/vinted/live', async (req, res) => {
           realItemsCache.unshift(it);
         }
       }
-      results = transformed;
+
+      // Merge freshly transformed items with any matching cached items
+      const now = Date.now();
+      const searchWords = search.split(/\s+/).filter(Boolean);
+      const cachedMatches = realItemsCache.filter((item) => {
+        const isFresh = (now - item.discoveredAt) < 20 * 60 * 1000;
+        const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
+        const matchesSearch = searchWords.length === 0 || searchWords.every((w) => itemText.includes(w));
+        const matchesBrand = !brand || brand === 'tutti' || item.brand.toLowerCase().includes(brand);
+        return isFresh && matchesSearch && matchesBrand;
+      });
+
+      const map = new Map<string, VintedItem>();
+      for (const it of transformed) map.set(it.id, it);
+      for (const it of cachedMatches) {
+        if (!map.has(it.id)) map.set(it.id, it);
+      }
+      results = Array.from(map.values());
     } catch {
       const now = Date.now();
+      const searchWords = search.split(/\s+/).filter(Boolean);
       results = realItemsCache.filter((item) => {
         const isFresh = (now - item.discoveredAt) < 20 * 60 * 1000;
-        const matchesSearch = !search || item.title.toLowerCase().includes(search) || item.brand.toLowerCase().includes(search);
+        const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
+        const matchesSearch = searchWords.length === 0 || searchWords.every((w) => itemText.includes(w));
         const matchesBrand = !brand || brand === 'tutti' || item.brand.toLowerCase().includes(brand);
         return isFresh && matchesSearch && matchesBrand;
       });
@@ -490,9 +546,10 @@ app.get('/api/vinted/live', async (req, res) => {
   }
 
   if (brand && brand !== 'tutti') {
+    const brandLower = brand.toLowerCase();
     results = results.filter((item) => 
-      item.brand.toLowerCase().includes(brand) || 
-      item.title.toLowerCase().includes(brand)
+      item.brand.toLowerCase().includes(brandLower) || 
+      item.title.toLowerCase().includes(brandLower)
     );
   }
 

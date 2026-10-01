@@ -112,6 +112,18 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
     setSearchInput(currentSearch);
   }, [currentSearch]);
 
+  // Real-time automatic search & filter synchronization (debounced to avoid request thrashing)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const primaryBrand = selectedBrands.length === 1 ? selectedBrands[0] : (selectedBrands.length > 1 ? selectedBrands.join(' ') : 'Tutti');
+      // Only trigger if values differ from currently active props
+      if (searchInput.trim() !== currentSearch || primaryBrand !== currentBrand) {
+        onFilterChange(searchInput.trim(), primaryBrand);
+      }
+    }, 260);
+    return () => clearTimeout(timer);
+  }, [searchInput, selectedBrands, currentSearch, currentBrand, onFilterChange]);
+
   useEffect(() => {
     if (currentBrand && currentBrand !== 'Tutti') {
       setSelectedBrands([currentBrand]);
