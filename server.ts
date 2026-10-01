@@ -470,6 +470,16 @@ app.get('/api/download-zip', (_req, res) => {
   }
 });
 
+// Download compiled iOS IPA package
+app.get('/api/download-ipa', (_req, res) => {
+  const ipaPath = path.resolve(__dirname, 'FynditExport.ipa');
+  if (fs.existsSync(ipaPath)) {
+    res.download(ipaPath, 'FynditExport.ipa');
+  } else {
+    res.status(404).json({ error: 'File IPA in preparazione' });
+  }
+});
+
 // Push directly to user's GitHub repository if token is provided
 app.post('/api/github-push', (req, res) => {
   const { token, repo } = req.body;

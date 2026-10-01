@@ -96,20 +96,27 @@ export const IpaExportView: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row items-center gap-2.5">
           <a
-            href="/api/download-zip"
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-cyan-500/20 active:scale-95 cursor-pointer"
+            href="/api/download-ipa"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer"
           >
             <Download className="w-4 h-4" />
-            Scarica ZIP Aggiornato
+            Scarica FynditExport.ipa
           </a>
           <a
-            href={repoUrl}
+            href="/api/download-zip"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold text-xs flex items-center justify-center gap-2 transition-all border border-cyan-500/40"
+          >
+            <Download className="w-4 h-4" />
+            Scarica ZIP Progetto
+          </a>
+          <a
+            href={actionsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs flex items-center justify-center gap-2 transition-colors border border-zinc-700"
           >
             <Github className="w-4 h-4" />
-            Apri GitHub
+            GitHub Actions CI
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
