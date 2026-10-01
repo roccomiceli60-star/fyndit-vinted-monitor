@@ -191,15 +191,15 @@ async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): P
     }
   }
 
-  // Filter out promoted/bumped items and obsolete old IDs
+  // Filter out promoted/bumped items; only filter idDelta on generic drops
   const strictlyFresh = rawItems.filter((it: any) => {
     // 1. Exclude paid bumps/promoted items
     if (it.promoted === true) return false;
     
-    // 2. Exclude old IDs that are far below current highest listing ID
-    if (highestSeenRawId > 0 && it.id && typeof it.id === 'number') {
+    // 2. Exclude old IDs only during general sniper feed, never on explicit searches
+    if (!searchText.trim() && highestSeenRawId > 0 && it.id && typeof it.id === 'number') {
       const idDelta = highestSeenRawId - it.id;
-      if (idDelta > 35000) return false;
+      if (idDelta > 45000) return false;
     }
     return true;
   });
@@ -210,20 +210,28 @@ async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): P
 // Transform raw Vinted item with realistic market valuation
 function transformVintedItem(raw: any): VintedItem {
   const price = parseFloat(raw.price?.amount || '25.00');
-  const brand = raw.item_box?.first_line || 'Brand';
+  const brand = raw.item_box?.first_line || 'Vinted';
   const title = raw.title || 'Articolo Vinted';
   const { size, condition } = parseSizeAndCondition(raw.item_box?.second_line);
 
   // Calculate high-accuracy realistic market valuation
   const valuation = calculateMarketValuation(brand, price, title, condition);
 
-  let img = 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80';
+  let img = '';
   if (raw.photo) {
-    if (raw.photo.thumbnails && raw.photo.thumbnails.length > 2) {
-      img = raw.photo.thumbnails[2].url || raw.photo.full_size_url || raw.photo.url;
+    if (Array.isArray(raw.photo.thumbnails) && raw.photo.thumbnails.length > 0) {
+      const thumb = raw.photo.thumbnails.find((t: any) => t.type?.includes('medium') || t.type?.includes('310') || t.type?.includes('large')) || raw.photo.thumbnails[raw.photo.thumbnails.length - 1];
+      img = thumb?.url || raw.photo.full_size_url || raw.photo.url || '';
     } else {
-      img = raw.photo.full_size_url || raw.photo.url || img;
+      img = raw.photo.full_size_url || raw.photo.url || '';
     }
+  }
+  if (!img && Array.isArray(raw.photos) && raw.photos.length > 0) {
+    const p = raw.photos[0];
+    img = p.url || p.full_size_url || (Array.isArray(p.thumbnails) && p.thumbnails[0]?.url) || '';
+  }
+  if (!img) {
+    img = 'https://images1.vinted.net/t/04_005ba_An4HTJGzsV4nWGKrJSkHRe8Y/310x430/8c6d7fc2.webp';
   }
 
   const countries = [
@@ -418,7 +426,10 @@ app.get('/api/vinted/live', async (req, res) => {
   }
 
   if (brand && brand !== 'tutti') {
-    results = results.filter((item) => item.brand.toLowerCase().includes(brand));
+    results = results.filter((item) => 
+      item.brand.toLowerCase().includes(brand) || 
+      item.title.toLowerCase().includes(brand)
+    );
   }
 
   if (minPrice && !isNaN(minPrice) && minPrice > 0) {

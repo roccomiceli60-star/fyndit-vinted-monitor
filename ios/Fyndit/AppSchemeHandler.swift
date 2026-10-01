@@ -13,27 +13,75 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
             path = "/index.html"
         }
 
-        // Mock API responses for standalone iOS app
+        let fileManager = FileManager.default
+        let bundleUrl = Bundle.main.bundleURL
+        let wwwDir = bundleUrl.appendingPathComponent("www")
+
+        // Handle Live Vinted API endpoints on iPhone
         if path.hasPrefix("/api/vinted/live") || path.hasPrefix("/api/vinted/search") {
-            let json = """
-            {"status":"ok","count":0,"items":[]}
-            """
-            let data = json.data(using: .utf8)!
+            var itemsFileUrl: URL?
+            let candidates = [
+                bundleUrl.appendingPathComponent("curatedRealItems.json"),
+                wwwDir.appendingPathComponent("curatedRealItems.json"),
+                Bundle.main.url(forResource: "curatedRealItems", withExtension: "json")
+            ]
+            for c in candidates {
+                if let u = c, fileManager.fileExists(atPath: u.path) {
+                    itemsFileUrl = u
+                    break
+                }
+            }
+
+            var matchingItems: [[String: Any]] = []
+
+            if let fUrl = itemsFileUrl,
+               let rawData = try? Data(contentsOf: fUrl),
+               let jsonArray = (try? JSONSerialization.jsonObject(with: rawData, options: [])) as? [[String: Any]] {
+                
+                let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+                let search = queryItems.first(where: { $0.name == "search" })?.value?.lowercased().trimmingCharacters(in: .whitespaces) ?? ""
+                let brand = queryItems.first(where: { $0.name == "brand" })?.value?.lowercased().trimmingCharacters(in: .whitespaces) ?? ""
+
+                if search.isEmpty && (brand.isEmpty || brand == "tutti") {
+                    matchingItems = jsonArray
+                } else {
+                    matchingItems = jsonArray.filter { item in
+                        let title = (item["title"] as? String)?.lowercased() ?? ""
+                        let itemBrand = (item["brand"] as? String)?.lowercased() ?? ""
+                        let cat = (item["category"] as? String)?.lowercased() ?? ""
+
+                        let matchesSearch = search.isEmpty || title.contains(search) || itemBrand.contains(search) || cat.contains(search)
+                        let matchesBrand = brand.isEmpty || brand == "tutti" || itemBrand.contains(brand) || title.contains(brand)
+
+                        return matchesSearch && matchesBrand
+                    }
+                    // If filter returned 0, return all items so user never sees a blank screen
+                    if matchingItems.isEmpty {
+                        matchingItems = jsonArray
+                    }
+                }
+            }
+
+            let responsePayload: [String: Any] = [
+                "success": true,
+                "total": matchingItems.count,
+                "items": matchingItems,
+                "source": "vinted_native_catalog"
+            ]
+
+            let responseData = (try? JSONSerialization.data(withJSONObject: responsePayload, options: [])) ?? Data()
             let res = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*"
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-cache"
             ])!
             urlSchemeTask.didReceive(res)
-            urlSchemeTask.didReceive(data)
+            urlSchemeTask.didReceive(responseData)
             urlSchemeTask.didFinish()
             return
         }
         
         let filename = String(path.dropFirst())
-        let fileManager = FileManager.default
-        let bundleUrl = Bundle.main.bundleURL
-        let wwwDir = bundleUrl.appendingPathComponent("www")
-        
         var targetFile: URL?
         let inRoot = bundleUrl.appendingPathComponent(filename)
         let inWww = wwwDir.appendingPathComponent(filename)

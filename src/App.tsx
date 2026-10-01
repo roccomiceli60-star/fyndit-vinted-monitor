@@ -174,7 +174,7 @@ export default function App() {
       if (search.trim()) url.searchParams.set('search', search.trim());
       if (brand && brand !== 'Tutti') url.searchParams.set('brand', brand);
 
-      const res = await fetch(url.toString(), { signal: AbortSignal.timeout(2000) });
+      const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
         const data = await res.json();
         setLatencyMs(Math.max(1, Date.now() - start));

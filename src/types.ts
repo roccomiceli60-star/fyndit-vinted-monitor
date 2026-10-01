@@ -2,12 +2,14 @@ export type ConditionType =
   | 'Nuovo con cartellino'
   | 'Nuovo senza cartellino'
   | 'Ottime condizioni'
-  | 'Buone condizioni';
+  | 'Buone condizioni'
+  | string;
 
 export type DealScore = 'STEAL' | 'DEAL' | 'GOOD' | 'FAIR';
 
 export interface VintedListing {
   id: string;
+  rawId?: number;
   title: string;
   brand: string;
   category: string;
@@ -45,11 +47,14 @@ export interface VintedMonitor {
   sizes: string[];
   maxPrice: number;
   minPrice: number;
-  minCondition: ConditionType | 'Tutte';
-  countries: string[];
+  minDiscountPercent?: number;
+  minCondition?: ConditionType | 'Tutte';
+  countries?: string[];
   isActive: boolean;
-  enableSound: boolean;
-  enableNotifications: boolean;
+  enableSound?: boolean;
+  enableNotifications?: boolean;
+  soundEnabled?: boolean;
+  notificationEnabled?: boolean;
   discordWebhookUrl?: string;
   createdAt: number;
   matchCount: number;

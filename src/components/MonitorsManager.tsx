@@ -320,7 +320,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
               {/* Countries */}
               <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
                 <Globe className="w-3.5 h-3.5 text-zinc-500" />
-                <span>Paesi: {mon.countries.join(', ')}</span>
+                <span>Paesi: {mon.countries?.join(', ') || 'Tutti'}</span>
               </div>
             </div>
 
