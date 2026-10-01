@@ -172,7 +172,11 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
         {filteredListings.map((item) => (
           <div
             key={item.id}
-            className="group rounded-2xl bg-zinc-900 border border-zinc-800/80 hover:border-cyan-500/50 transition-all duration-200 overflow-hidden flex flex-col hover:shadow-xl hover:shadow-cyan-500/5"
+            className={`group rounded-2xl bg-zinc-900 border transition-all duration-200 overflow-hidden flex flex-col hover:shadow-xl hover:shadow-cyan-500/5 ${
+              item.isNewDrop 
+                ? 'border-emerald-500/90 ring-2 ring-emerald-500/50 shadow-xl shadow-emerald-500/20' 
+                : 'border-zinc-800/80 hover:border-cyan-500/50'
+            }`}
           >
             {/* Image Header with Badges */}
             <div className="relative aspect-[4/3] bg-zinc-950 overflow-hidden">
@@ -183,7 +187,12 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 loading="lazy"
               />
 
-              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
+                {item.isNewDrop && (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-400 text-zinc-950 text-[10px] font-black uppercase tracking-wider animate-pulse flex items-center gap-1 shadow-md">
+                    <Zap className="w-3 h-3 fill-zinc-950" /> APPENA USCITO
+                  </span>
+                )}
                 {item.dealScore === 'STEAL' ? (
                   <span className="px-2 py-0.5 rounded-md bg-amber-500 text-zinc-950 text-xs font-black flex items-center gap-1 shadow-md shadow-amber-500/30">
                     <Flame className="w-3.5 h-3.5 fill-zinc-950" />
@@ -200,7 +209,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
               <div className="absolute top-2.5 right-2.5">
                 <span className="px-2 py-0.5 rounded-md bg-zinc-950/80 backdrop-blur text-[11px] font-semibold text-zinc-300 border border-zinc-700/60 flex items-center gap-1">
                   <Clock className="w-3 h-3 text-cyan-400" />
-                  {item.publishedSecondsAgo}s fa
+                  {item.publishedSecondsAgo <= 2 ? 'Istanti fa' : `${item.publishedSecondsAgo}s fa`}
                 </span>
               </div>
 
@@ -245,23 +254,34 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="grid grid-cols-2 gap-1.5 pt-1">
-                <button
-                  onClick={() => onAutocopItem(item)}
-                  className="w-full py-2 px-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1 transition-all shadow-md shadow-cyan-500/20 active:scale-95"
+              {/* ULTRA-FAST 1-CLICK BUY BUTTONS */}
+              <div className="space-y-1.5 pt-1">
+                <a
+                  href={item.vintedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/25 active:scale-95 cursor-pointer"
                 >
-                  <Zap className="w-3.5 h-3.5 fill-zinc-950" />
-                  Autocop
-                </button>
+                  <Zap className="w-4 h-4 fill-zinc-950 animate-bounce" />
+                  ⚡ COMPRA SUBITO SU VINTED
+                </a>
 
-                <button
-                  onClick={() => onOpenCalculatorWithItem(item)}
-                  className="w-full py-2 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs flex items-center justify-center gap-1 transition-colors"
-                >
-                  <Calculator className="w-3.5 h-3.5 text-emerald-400" />
-                  Margine
-                </button>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => onAutocopItem(item)}
+                    className="py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-cyan-300 font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95"
+                  >
+                    <span>🎯</span> Sniper Bot
+                  </button>
+
+                  <button
+                    onClick={() => onOpenCalculatorWithItem(item)}
+                    className="py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Calculator className="w-3.5 h-3.5 text-emerald-400" />
+                    Margine
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
@@ -272,7 +292,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                   {copiedId === item.id ? (
                     <><Check className="w-3 h-3 text-emerald-400" /> Copiato!</>
                   ) : (
-                    <><Copy className="w-3 h-3" /> Copia Link</>
+                    <><Copy className="w-3 h-3" /> Copia Link Vinted</>
                   )}
                 </button>
 

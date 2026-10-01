@@ -28,6 +28,8 @@ export interface VintedListing {
   publishedSecondsAgo: number;
   dealScore: DealScore;
   likesCount: number;
+  isNewDrop?: boolean;
+  discoveredAt?: number;
 }
 
 export interface VintedMonitor {

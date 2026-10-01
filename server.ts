@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,7 +12,7 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json());
 
 // In-memory store of real Vinted listings
-interface VintedItem {
+export interface VintedItem {
   id: string;
   title: string;
   brand: string;
@@ -35,14 +35,36 @@ interface VintedItem {
   dealScore: 'STEAL' | 'DEAL' | 'GOOD' | 'FAIR';
   likesCount: number;
   discoveredAt: number;
+  isNewDrop?: boolean;
 }
 
 let realItemsCache: VintedItem[] = [];
+const seenItemIds = new Set<string>();
 let sessionCookieHeader = '';
 let lastCookieFetch = 0;
-let isPolling = false;
 
-// Helper to calculate estimated market value based on brand and category
+// Set of active Server-Sent Events clients for instant zero-latency push
+const sseClients = new Set<Response>();
+
+function broadcastNewItems(newItems: VintedItem[]) {
+  if (newItems.length === 0 || sseClients.size === 0) return;
+  const payload = JSON.stringify({
+    type: 'NEW_DROPS',
+    timestamp: Date.now(),
+    count: newItems.length,
+    items: newItems,
+  });
+
+  for (const client of sseClients) {
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+// Estimate resell market value
 function estimateMarketValue(brand: string, price: number, title: string): number {
   const lowerBrand = brand.toLowerCase();
   const lowerTitle = title.toLowerCase();
@@ -68,7 +90,7 @@ function estimateMarketValue(brand: string, price: number, title: string): numbe
   return Number(estimated.toFixed(2));
 }
 
-// Helper to extract clean size from Vinted second line
+// Parse clean size and condition
 function parseSizeAndCondition(secondLine?: string): { size: string; condition: string } {
   if (!secondLine) return { size: 'M', condition: 'Ottime condizioni' };
   const parts = secondLine.split('·').map((p) => p.trim());
@@ -97,7 +119,7 @@ function parseSizeAndCondition(secondLine?: string): { size: string; condition: 
 // Fetch session cookies from Vinted
 async function refreshVintedSession(): Promise<string> {
   const now = Date.now();
-  if (sessionCookieHeader && now - lastCookieFetch < 20 * 60 * 1000) {
+  if (sessionCookieHeader && now - lastCookieFetch < 25 * 60 * 1000) {
     return sessionCookieHeader;
   }
 
@@ -160,7 +182,7 @@ async function fetchFromVinted(searchText = '', perPage = 20): Promise<any[]> {
   return json.items || [];
 }
 
-// Convert raw Vinted item to app model
+// Transform raw Vinted item
 function transformVintedItem(raw: any): VintedItem {
   const price = parseFloat(raw.price?.amount || '25.00');
   const brand = raw.item_box?.first_line || 'Brand';
@@ -169,7 +191,6 @@ function transformVintedItem(raw: any): VintedItem {
   const discount = Math.min(85, Math.max(30, Math.round(((marketVal - price) / marketVal) * 100)));
   const { size, condition } = parseSizeAndCondition(raw.item_box?.second_line);
 
-  // Extract best photo
   let img = 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80';
   if (raw.photo) {
     if (raw.photo.thumbnails && raw.photo.thumbnails.length > 2) {
@@ -205,70 +226,121 @@ function transformVintedItem(raw: any): VintedItem {
     },
     imageUrl: img,
     vintedUrl: raw.url?.startsWith('http') ? raw.url : `https://www.vinted.it${raw.url || ''}`,
-    publishedSecondsAgo: 5,
+    publishedSecondsAgo: 1,
     dealScore: discount >= 50 ? 'STEAL' : 'DEAL',
-    likesCount: raw.favourite_count || 1,
+    likesCount: raw.favourite_count || 0,
     discoveredAt: Date.now(),
+    isNewDrop: true,
   };
 }
 
-// Background polling worker that keeps the cache always fresh
-async function pollCycle() {
-  if (isPolling) return;
-  isPolling = true;
+// Processing cycle for incoming items
+function ingestRawItems(items: any[]): VintedItem[] {
+  const transformed = items.map(transformVintedItem);
+  const brandNew: VintedItem[] = [];
 
-  const queries = [
-    '', // All newest items
-    'trapstar',
-    'nike dunk',
-    'corteiz',
-    'ralph lauren',
-    'carhartt detroit',
-    'stussy 8 ball',
-    'stone island',
-  ];
-
-  for (const q of queries) {
-    try {
-      const items = await fetchFromVinted(q, 15);
-      const transformed = items.map(transformVintedItem);
-
-      // Merge and deduplicate by id
-      const existingIds = new Set(realItemsCache.map((i) => i.id));
-      const newItems: VintedItem[] = [];
-
-      for (const item of transformed) {
-        if (!existingIds.has(item.id)) {
-          newItems.push(item);
-          existingIds.add(item.id);
-        }
-      }
-
-      if (newItems.length > 0) {
-        realItemsCache = [...newItems, ...realItemsCache].slice(0, 120);
-      }
-    } catch (e) {
-      // Continue to next query if one fails
+  for (const it of transformed) {
+    if (!seenItemIds.has(it.id)) {
+      seenItemIds.add(it.id);
+      brandNew.push(it);
     }
-    // Small sleep between queries
-    await new Promise((r) => setTimeout(r, 1200));
   }
 
-  isPolling = false;
+  if (brandNew.length > 0) {
+    realItemsCache = [...brandNew, ...realItemsCache].slice(0, 150);
+    broadcastNewItems(brandNew);
+  }
+
+  return brandNew;
 }
 
-// Start polling immediately and every 10 seconds
-pollCycle();
-setInterval(pollCycle, 10000);
+// Micro-Worker 1: General newest drops (Highest priority sniper, runs every 1.4s)
+async function runGeneralWorker() {
+  while (true) {
+    try {
+      const raw = await fetchFromVinted('', 20);
+      ingestRawItems(raw);
+    } catch {
+      // transient network error, retry
+    }
+    await new Promise((r) => setTimeout(r, 1400));
+  }
+}
+
+// Micro-Worker 2: Monitored Sniper Brands rotation (Runs every 1.8s)
+const SNIPER_QUERIES = [
+  'trapstar',
+  'corteiz',
+  'nike dunk',
+  'ralph lauren',
+  'carhartt detroit',
+  'stussy 8 ball',
+  'stone island',
+];
+let queryIdx = 0;
+
+async function runBrandWorker() {
+  while (true) {
+    const q = SNIPER_QUERIES[queryIdx % SNIPER_QUERIES.length];
+    queryIdx++;
+    try {
+      const raw = await fetchFromVinted(q, 15);
+      ingestRawItems(raw);
+    } catch {
+      // ignore
+    }
+    await new Promise((r) => setTimeout(r, 1800));
+  }
+}
+
+// Start concurrent micro-workers
+runGeneralWorker();
+setTimeout(runBrandWorker, 700);
 
 // API Routes
+
+// 1. SSE Stream: Pushes new items the millisecond they are detected
+app.get('/api/vinted/stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  // Send initial batch of cached items immediately so UI has 0ms cold start
+  const initialPayload = JSON.stringify({
+    type: 'INITIAL_STATE',
+    timestamp: Date.now(),
+    items: realItemsCache.slice(0, 50),
+  });
+  res.write(`data: ${initialPayload}\n\n`);
+
+  sseClients.add(res);
+
+  // Heartbeat to keep connection alive
+  const pingInterval = setInterval(() => {
+    try {
+      res.write(`: ping\n\n`);
+    } catch {
+      clearInterval(pingInterval);
+      sseClients.delete(res);
+    }
+  }, 10000);
+
+  req.on('close', () => {
+    clearInterval(pingInterval);
+    sseClients.delete(res);
+  });
+});
+
+// 2. REST Live Endpoint for instant filtering & search
 app.get('/api/vinted/live', async (req, res) => {
   const startTime = Date.now();
   const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
   const brand = typeof req.query.brand === 'string' ? req.query.brand.trim().toLowerCase() : '';
   const maxPrice = req.query.max_price ? parseFloat(req.query.max_price as string) : null;
 
-  // If specific search requested and not found in cache, fetch directly from Vinted live
   let results = [...realItemsCache];
 
   if (search && search.length >= 2) {
@@ -278,22 +350,14 @@ app.get('/api/vinted/live', async (req, res) => {
         item.brand.toLowerCase().includes(search)
     );
 
-    if (matchesInCache.length >= 5) {
+    if (matchesInCache.length >= 6) {
       results = matchesInCache;
     } else {
       try {
         const liveItems = await fetchFromVinted(search, 20);
-        const transformed = liveItems.map(transformVintedItem);
-        // Add to cache
-        const existingIds = new Set(realItemsCache.map((i) => i.id));
-        for (const item of transformed) {
-          if (!existingIds.has(item.id)) {
-            realItemsCache.unshift(item);
-            existingIds.add(item.id);
-          }
-        }
-        results = transformed;
-      } catch (err) {
+        const newTransformed = ingestRawItems(liveItems);
+        results = [...newTransformed, ...matchesInCache];
+      } catch {
         results = matchesInCache;
       }
     }
@@ -307,11 +371,10 @@ app.get('/api/vinted/live', async (req, res) => {
     results = results.filter((item) => item.price <= maxPrice);
   }
 
-  // Update dynamic publishedSecondsAgo
   const now = Date.now();
   results = results.map((item) => ({
     ...item,
-    publishedSecondsAgo: Math.max(2, Math.round((now - item.discoveredAt) / 1000)),
+    publishedSecondsAgo: Math.max(1, Math.round((now - item.discoveredAt) / 1000)),
   }));
 
   const latencyMs = Date.now() - startTime;
@@ -324,13 +387,14 @@ app.get('/api/vinted/live', async (req, res) => {
   });
 });
 
-app.get('/api/vinted/status', (req, res) => {
+app.get('/api/vinted/status', (_req, res) => {
   res.json({
     status: 'ONLINE',
     totalCached: realItemsCache.length,
+    activeStreamListeners: sseClients.size,
     sessionActive: Boolean(sessionCookieHeader),
     lastCookieUpdate: new Date(lastCookieFetch).toISOString(),
-    backend: 'Node.js Express + Vinted Official API Proxy',
+    sniperMode: 'ULTRA_FAST_CONCURRENT_SSE',
   });
 });
 
@@ -350,7 +414,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Fyndit Server attivo su http://0.0.0.0:${PORT}`);
+    console.log(`Fyndit Ultra-Fast Sniper Server attivo su http://0.0.0.0:${PORT}`);
   });
 }
 
