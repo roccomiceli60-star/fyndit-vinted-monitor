@@ -1156,9 +1156,14 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 src={item.imageUrl}
                 alt={item.title}
                 referrerPolicy="no-referrer"
-                crossOrigin="anonymous"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'https://images1.vinted.net/t/04_005ba_An4HTJGzsV4nWGKrJSkHRe8Y/310x430/8c6d7fc2.webp';
+                  const target = e.target as HTMLImageElement;
+                  if (!target.dataset.triedProxy && item.imageUrl.startsWith('http')) {
+                    target.dataset.triedProxy = 'true';
+                    target.src = `/api/image-proxy?url=${encodeURIComponent(item.imageUrl)}`;
+                  } else {
+                    target.src = 'https://images1.vinted.net/t/04_005ba_An4HTJGzsV4nWGKrJSkHRe8Y/310x430/8c6d7fc2.webp';
+                  }
                 }}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 loading="lazy"

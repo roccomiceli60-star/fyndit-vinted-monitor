@@ -459,6 +459,32 @@ app.get('/api/vinted/live', async (req, res) => {
   });
 });
 
+app.get('/api/image-proxy', async (req, res) => {
+  const imageUrl = req.query.url as string;
+  if (!imageUrl || !imageUrl.startsWith('http')) {
+    return res.status(400).send('Invalid url');
+  }
+  try {
+    const upstream = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Referer': 'https://www.vinted.it/',
+      },
+    });
+    if (!upstream.ok) {
+      return res.status(upstream.status).send('Failed to fetch image');
+    }
+    const contentType = upstream.headers.get('content-type') || 'image/webp';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    const buffer = await upstream.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    res.status(500).send('Proxy error');
+  }
+});
+
 app.get('/api/vinted/status', (_req, res) => {
   res.json({
     status: 'ONLINE',

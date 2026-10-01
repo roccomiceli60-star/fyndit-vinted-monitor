@@ -157,18 +157,13 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Execute Search query: instant client search + remote background search
+  // Execute Search query: queries live API first, falls back smoothly to client pool
   const executeSearch = useCallback(async (search: string, brand: string) => {
     setActiveSearch(search);
     setActiveBrand(brand);
     setIsSearching(true);
     const start = Date.now();
 
-    // Step 1: Instant client search
-    setListings((prev) => searchClientItems(search, brand, prev));
-    setLatencyMs(1);
-
-    // Step 2: Query live API if reachable
     try {
       const url = new URL('/api/vinted/live', window.location.origin);
       if (search.trim()) url.searchParams.set('search', search.trim());
@@ -183,13 +178,18 @@ export default function App() {
           for (const item of data.items) {
             seenIdsRef.current.add(item.id);
           }
+          return;
         }
       }
     } catch {
-      // Client search already applied seamlessly
+      // ignore
     } finally {
       setIsSearching(false);
     }
+
+    // Client fallback if network was unreachable
+    setListings((prev) => searchClientItems(search, brand, prev));
+    setLatencyMs(1);
   }, []);
 
   const handleOpenCalculatorWithItem = (item: VintedListing) => {
