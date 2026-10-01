@@ -155,7 +155,7 @@ async function refreshVintedSession(): Promise<string> {
 }
 
 // Fetch items from Vinted API
-async function fetchFromVinted(searchText = '', perPage = 20): Promise<any[]> {
+async function fetchFromVinted(searchText = '', perPage = 25): Promise<any[]> {
   const cookies = await refreshVintedSession();
   const url = `https://api.vinted.it/svc-catalogue/items?search_text=${encodeURIComponent(
     searchText
@@ -234,7 +234,7 @@ function transformVintedItem(raw: any): VintedItem {
   };
 }
 
-// Processing cycle for incoming items
+// Processing cycle for incoming items in background
 function ingestRawItems(items: any[]): VintedItem[] {
   const transformed = items.map(transformVintedItem);
   const brandNew: VintedItem[] = [];
@@ -247,27 +247,27 @@ function ingestRawItems(items: any[]): VintedItem[] {
   }
 
   if (brandNew.length > 0) {
-    realItemsCache = [...brandNew, ...realItemsCache].slice(0, 150);
+    realItemsCache = [...brandNew, ...realItemsCache].slice(0, 160);
     broadcastNewItems(brandNew);
   }
 
   return brandNew;
 }
 
-// Micro-Worker 1: General newest drops (Highest priority sniper, runs every 1.4s)
+// Micro-Worker 1: General newest drops
 async function runGeneralWorker() {
   while (true) {
     try {
-      const raw = await fetchFromVinted('', 20);
+      const raw = await fetchFromVinted('', 25);
       ingestRawItems(raw);
     } catch {
-      // transient network error, retry
+      // transient error, continue
     }
-    await new Promise((r) => setTimeout(r, 1400));
+    await new Promise((r) => setTimeout(r, 1600));
   }
 }
 
-// Micro-Worker 2: Monitored Sniper Brands rotation (Runs every 1.8s)
+// Micro-Worker 2: Monitored Brands rotation
 const SNIPER_QUERIES = [
   'trapstar',
   'corteiz',
@@ -289,13 +289,12 @@ async function runBrandWorker() {
     } catch {
       // ignore
     }
-    await new Promise((r) => setTimeout(r, 1800));
+    await new Promise((r) => setTimeout(r, 2000));
   }
 }
 
-// Start concurrent micro-workers
 runGeneralWorker();
-setTimeout(runBrandWorker, 700);
+setTimeout(runBrandWorker, 800);
 
 // API Routes
 
@@ -308,7 +307,6 @@ app.get('/api/vinted/stream', (req, res) => {
     'Access-Control-Allow-Origin': '*',
   });
 
-  // Send initial batch of cached items immediately so UI has 0ms cold start
   const initialPayload = JSON.stringify({
     type: 'INITIAL_STATE',
     timestamp: Date.now(),
@@ -318,7 +316,6 @@ app.get('/api/vinted/stream', (req, res) => {
 
   sseClients.add(res);
 
-  // Heartbeat to keep connection alive
   const pingInterval = setInterval(() => {
     try {
       res.write(`: ping\n\n`);
@@ -334,40 +331,56 @@ app.get('/api/vinted/stream', (req, res) => {
   });
 });
 
-// 2. REST Live Endpoint for instant filtering & search
+// 2. High-Precision REST Live Endpoint for instant filtering & search
 app.get('/api/vinted/live', async (req, res) => {
   const startTime = Date.now();
   const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
   const brand = typeof req.query.brand === 'string' ? req.query.brand.trim().toLowerCase() : '';
   const maxPrice = req.query.max_price ? parseFloat(req.query.max_price as string) : null;
 
-  let results = [...realItemsCache];
+  let results: VintedItem[] = [];
 
-  if (search && search.length >= 2) {
-    const matchesInCache = results.filter(
-      (item) =>
-        item.title.toLowerCase().includes(search) ||
-        item.brand.toLowerCase().includes(search)
-    );
-
-    if (matchesInCache.length >= 6) {
-      results = matchesInCache;
-    } else {
-      try {
-        const liveItems = await fetchFromVinted(search, 20);
-        const newTransformed = ingestRawItems(liveItems);
-        results = [...newTransformed, ...matchesInCache];
-      } catch {
-        results = matchesInCache;
-      }
+  // If user searched for a specific keyword or brand
+  if (search || (brand && brand !== 'tutti')) {
+    // Construct optimal Vinted search term
+    let effectiveQuery = search;
+    if (brand && brand !== 'tutti') {
+      effectiveQuery = search ? `${brand} ${search}`.trim() : brand;
     }
+
+    try {
+      // Always fetch directly from live Vinted catalog
+      const rawItems = await fetchFromVinted(effectiveQuery, 30);
+      const transformed = rawItems.map(transformVintedItem);
+
+      // Save into cache for future lookups
+      for (const it of transformed) {
+        if (!seenItemIds.has(it.id)) {
+          seenItemIds.add(it.id);
+          realItemsCache.unshift(it);
+        }
+      }
+      results = transformed;
+    } catch (err) {
+      // Fallback to cache matches
+      results = realItemsCache.filter((item) => {
+        const matchesSearch = !search || item.title.toLowerCase().includes(search) || item.brand.toLowerCase().includes(search);
+        const matchesBrand = !brand || brand === 'tutti' || item.brand.toLowerCase().includes(brand);
+        return matchesSearch && matchesBrand;
+      });
+    }
+  } else {
+    // No search: return latest items from cache
+    results = [...realItemsCache];
   }
 
+  // Filter by brand if results contain multiple
   if (brand && brand !== 'tutti') {
     results = results.filter((item) => item.brand.toLowerCase().includes(brand));
   }
 
-  if (maxPrice && !isNaN(maxPrice)) {
+  // Filter by maxPrice only if specified
+  if (maxPrice && !isNaN(maxPrice) && maxPrice > 0) {
     results = results.filter((item) => item.price <= maxPrice);
   }
 
@@ -382,6 +395,7 @@ app.get('/api/vinted/live', async (req, res) => {
     success: true,
     total: results.length,
     latencyMs,
+    query: search || brand || 'all',
     source: 'vinted_live_official_api',
     items: results,
   });
@@ -394,7 +408,7 @@ app.get('/api/vinted/status', (_req, res) => {
     activeStreamListeners: sseClients.size,
     sessionActive: Boolean(sessionCookieHeader),
     lastCookieUpdate: new Date(lastCookieFetch).toISOString(),
-    sniperMode: 'ULTRA_FAST_CONCURRENT_SSE',
+    sniperMode: 'LIVE_SEARCH_ENHANCED_V2',
   });
 });
 
@@ -414,7 +428,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Fyndit Ultra-Fast Sniper Server attivo su http://0.0.0.0:${PORT}`);
+    console.log(`Fyndit Server attivo su http://0.0.0.0:${PORT}`);
   });
 }
 
