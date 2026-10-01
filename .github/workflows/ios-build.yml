@@ -1,0 +1,140 @@
+name: Fyndit-iOS-ipa-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios:
+    name: 🚀 Fyndit iOS Build
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🎯 Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Installa dipendenze Flutter
+        run: flutter pub get
+
+      - name: 🛠️ Genera progetto nativo Xcode se assente
+        run: |
+          if [ ! -f "ios/Runner.xcodeproj/project.pbxproj" ]; then
+            echo "Generazione struttura Xcode tramite flutter create..."
+            flutter create . --platforms=ios --org com.fyndit.app
+          fi
+
+      - name: 🎨 Applica Icona Ufficiale Fyndit su iOS (Assets.xcassets)
+        run: |
+          echo "Copia dell'icona ufficiale di Fyndit nel catalogo risorse iOS..."
+          mkdir -p ios/Runner/Assets.xcassets/AppIcon.appiconset
+          cp -r flutter_dogana_italia/ios/Runner/Assets.xcassets/AppIcon.appiconset/* ios/Runner/Assets.xcassets/AppIcon.appiconset/ || true
+          cp -r flutter_dogana_italia/ios/Runner/Assets.xcassets/Contents.json ios/Runner/Assets.xcassets/Contents.json || true
+          echo "Icone presenti in AppIcon.appiconset:"
+          ls -lh ios/Runner/Assets.xcassets/AppIcon.appiconset/
+
+      - name: 🔑 Crea certificato autofirmato in Keychain per CI
+        run: |
+          echo "Creazione identità per bypassare i controlli del Flutter CLI..."
+          openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+            -keyout /tmp/ci_cert.key -out /tmp/ci_cert.crt \
+            -subj "/CN=Apple Development: CI Runner (0000000000)"
+          openssl pkcs12 -export -out /tmp/ci_cert.p12 \
+            -inkey /tmp/ci_cert.key -in /tmp/ci_cert.crt \
+            -password pass:cipass
+          
+          KC=$(security default-keychain | tr -d '" ' || echo "$HOME/Library/Keychains/login.keychain-db")
+          echo "Utilizzo keychain: $KC"
+          security unlock-keychain -p "" "$KC" || true
+          security import /tmp/ci_cert.p12 -k "$KC" -P cipass -T /usr/bin/codesign || true
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KC" || true
+          
+          echo "Identità di firma disponibili:"
+          security find-identity -p codesigning -v || true
+
+      - name: 🔓 Disabilita requisiti di firma Apple (No Developer Team / Manual)
+        run: |
+          python3 -c '
+          import os
+          path = "ios/Runner.xcodeproj/project.pbxproj"
+          if os.path.exists(path):
+              with open(path, "r") as f:
+                  c = f.read()
+              c = c.replace("CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;")
+              c = c.replace("CODE_SIGN_IDENTITY = \"iPhone Developer\";", "CODE_SIGN_IDENTITY = \"\";")
+              with open(path, "w") as f:
+                  f.write(c)
+              print("project.pbxproj configurato per compilazione senza firma.")
+          '
+
+      - name: 🔨 Compila iOS App (Release)
+        run: |
+          echo "Avvio compilazione dell'applicazione iOS Fyndit..."
+          flutter build ios --release --no-codesign || {
+            echo "Fallback xcodebuild..."
+            if [ -d "ios/Runner.xcworkspace" ]; then
+              xcodebuild -workspace ios/Runner.xcworkspace \
+                -scheme Runner \
+                -configuration Release \
+                -destination 'generic/platform=iOS' \
+                -derivedDataPath build/DerivedData \
+                CODE_SIGNING_ALLOWED=NO \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGN_IDENTITY="" \
+                build
+            else
+              xcodebuild -project ios/Runner.xcodeproj \
+                -scheme Runner \
+                -configuration Release \
+                -destination 'generic/platform=iOS' \
+                -derivedDataPath build/DerivedData \
+                CODE_SIGNING_ALLOWED=NO \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGN_IDENTITY="" \
+                build
+            fi
+          }
+
+      - name: 📦 Impacchetta archivio IPA (Payload)
+        run: |
+          APP_PATH=$(find build/ -name "Runner.app" -type d | head -n 1)
+          echo "Bundle applicazione trovato in: $APP_PATH"
+          if [ -z "$APP_PATH" ]; then
+            echo "Errore: Runner.app non trovato in build/!"
+            exit 1
+          fi
+          mkdir -p build/Payload
+          cp -r "$APP_PATH" build/Payload/
+          cd build
+          zip -qq -r -9 FynditExport.ipa Payload
+          echo "Archivio IPA creato con successo:"
+          ls -lh FynditExport.ipa
+
+      - name: 🚀 Carica file IPA su GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FynditExport-IPA
+          path: build/FynditExport.ipa
+          retention-days: 14
+
+      - name: 🏷️ Crea Release su GitHub con IPA
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0-${{ github.run_number }}
+          name: Fyndit Release v1.0 (Build ${{ github.run_number }})
+          files: build/FynditExport.ipa
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

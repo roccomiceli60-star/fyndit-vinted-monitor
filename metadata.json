@@ -1,0 +1,6 @@
+{
+  "name": "DoganaItalia AI - Calcolatore Dazi e IVA Dogana",
+  "description": "Calcolatore avanzato di dazi doganali, IVA all'importazione e spese di sdoganamento corrieri per acquisti extra-UE in Italia.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
