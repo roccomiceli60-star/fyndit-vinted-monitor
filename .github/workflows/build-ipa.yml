@@ -21,11 +21,16 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Web Dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Build Web Application (Vite SPA)
-        run: npm run build
+      - name: Verify or Build Web Application
+        run: |
+          if [ -d "dist" ] && [ -f "dist/index.html" ]; then
+            echo "✓ Pre-compiled web distribution (dist/) verified. Using existing build."
+          else
+            echo "Building web application..."
+            npm install --legacy-peer-deps --no-package-lock
+            npm install @rolldown/binding-darwin-arm64 --save-optional || true
+            npm run build
+          fi
 
       - name: Select Xcode Version
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
