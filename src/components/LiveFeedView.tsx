@@ -21,12 +21,14 @@ interface LiveFeedViewProps {
   listings: VintedListing[];
   onOpenCalculatorWithItem: (item: VintedListing) => void;
   onAutocopItem: (item: VintedListing) => void;
+  onFilterChange?: (search: string, brand: string) => void;
 }
 
 export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   listings,
   onOpenCalculatorWithItem,
   onAutocopItem,
+  onFilterChange,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('Tutti');
@@ -34,6 +36,16 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   const [maxPrice, setMaxPrice] = useState<number>(100);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isLiveStreaming, setIsLiveStreaming] = useState(true);
+
+  const handleSearchChange = (val: string) => {
+    setSearchTerm(val);
+    if (onFilterChange) onFilterChange(val, selectedBrand);
+  };
+
+  const handleBrandSelect = (brand: string) => {
+    setSelectedBrand(brand);
+    if (onFilterChange) onFilterChange(searchTerm, brand);
+  };
 
   const filteredListings = listings.filter((item) => {
     if (onlySteals && item.dealScore !== 'STEAL') return false;
@@ -103,9 +115,9 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
             <input
               type="text"
-              placeholder="Cerca per titolo (es. Trapstar, Dunk, Ralph Lauren, Corteiz)..."
+              placeholder="Cerca annunci reali Vinted (es. Trapstar, Dunk, Ralph Lauren, Corteiz)..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-cyan-500"
             />
           </div>
@@ -130,7 +142,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             <Filter className="w-3 h-3" /> Brand:
           </span>
           <button
-            onClick={() => setSelectedBrand('Tutti')}
+            onClick={() => handleBrandSelect('Tutti')}
             className={`px-2.5 py-1 rounded-md whitespace-nowrap transition-colors ${
               selectedBrand === 'Tutti' 
                 ? 'bg-cyan-500 text-zinc-950 font-bold' 
@@ -142,7 +154,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
           {POPULAR_BRANDS.slice(0, 10).map((brand) => (
             <button
               key={brand}
-              onClick={() => setSelectedBrand(brand)}
+              onClick={() => handleBrandSelect(brand)}
               className={`px-2.5 py-1 rounded-md whitespace-nowrap transition-colors ${
                 selectedBrand === brand 
                   ? 'bg-cyan-500 text-zinc-950 font-bold' 
