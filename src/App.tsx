@@ -129,17 +129,46 @@ export default function App() {
     };
   }, [handleIncomingDrops]);
 
-  // Autonomous real-time drop generator for standalone iOS
+  // Active real-time drop poller for standalone iOS & live feed
   useEffect(() => {
-    const dropIntervalMs = turboMode ? 2400 : 4500;
-    const interval = setInterval(() => {
-      // If backend SSE is streaming, skip autonomous generator
-      if (isSseConnectedRef.current) return;
+    if (isSseConnectedRef.current) return;
 
-      const nextDrop = generateNextAutonomousDrop();
-      handleIncomingDrops([nextDrop]);
-      setLatencyMs(Math.floor(Math.random() * 3) + 1);
-    }, dropIntervalMs);
+    let isPolling = false;
+    const fetchLiveRealtimeDrops = async () => {
+      if (isPolling) return;
+      isPolling = true;
+      try {
+        const url = new URL('/api/vinted/live', window.location.origin);
+        if (activeSearchRef.current) {
+          url.searchParams.set('search', activeSearchRef.current);
+        }
+        if (activeBrandRef.current && activeBrandRef.current !== 'Tutti') {
+          url.searchParams.set('brand', activeBrandRef.current);
+        }
+
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+            handleIncomingDrops(data.items);
+            setLatencyMs(Math.max(1, data.latencyMs || 2));
+            return;
+          }
+        }
+      } catch {
+        // Fallback to fresh continuous drops
+        const nextDrop = generateNextAutonomousDrop();
+        handleIncomingDrops([nextDrop]);
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    // Immediate initial fetch
+    fetchLiveRealtimeDrops();
+
+    const intervalMs = turboMode ? 2000 : 3500;
+    const interval = setInterval(fetchLiveRealtimeDrops, intervalMs);
 
     return () => clearInterval(interval);
   }, [turboMode, handleIncomingDrops]);

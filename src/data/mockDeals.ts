@@ -23,10 +23,10 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/06_01993_uGfThAoDRHgt1snSLsK2cFWS/310x430/eeac4b29.webp?s=c7f2798ab64b2aed616c4133f38a03e0bb8d1f89",
     "vintedUrl": "https://www.vinted.it/items/10209123821-wii-fit-board-and-games",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 2,
     "dealScore": "FAIR",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
+    "discoveredAt": 1790887748000,
     "isNewDrop": true
   },
   {
@@ -51,10 +51,10 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/01_00bb7_DmKcP9YgsBLFRxjVg7Yawe8m/310x430/e7e6d914.webp?s=629cb5db6ea6527ab1b17b710b925e569eeed07b",
     "vintedUrl": "https://www.vinted.it/items/10209116467-nintendo-ds",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 3,
     "dealScore": "FAIR",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
+    "discoveredAt": 1790887747000,
     "isNewDrop": true
   },
   {
@@ -79,10 +79,10 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/06_010c0_47ymdkwdfcHJotXBsX45H2CE/310x430/a44242e5.webp?s=7d8b6555146f2772f4f6ef914dd23b9d315f794e",
     "vintedUrl": "https://www.vinted.it/items/10209097913-switch-oled-white-64-gb-refurbished",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 6,
     "dealScore": "FAIR",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
+    "discoveredAt": 1790887744000,
     "isNewDrop": true
   },
   {
@@ -107,10 +107,10 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/06_012e7_PfxWr5HUmeNczJmukKHCmGLK/310x430/702e24f9.webp?s=dc2a7aa4227e5a326ebe665832641d2256e4f0de",
     "vintedUrl": "https://www.vinted.it/items/10209124958-nintendo-switch-sonic-force-bonus-edition",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 9,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
+    "discoveredAt": 1790887741000,
     "isNewDrop": true
   },
   {
@@ -135,10 +135,10 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/06_0045e_TEqoiuA6uTCzT67S27JSHpZU/310x430/3512408d.webp?s=b210be71b9c16c2754025439413098556cbf0027",
     "vintedUrl": "https://www.vinted.it/items/10209123903-fast-dispatch-new-super-mario-bros-nintendo-ds-action-platformer-game-cart",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 12,
     "dealScore": "GOOD",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
+    "discoveredAt": 1790887738000,
     "isNewDrop": true
   },
   {
@@ -163,10 +163,10 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/06_0046a_MmH1uSYz15pFTfCM3W6gi9Eh/310x430/26d0ead5.webp?s=4348ee75d55464f45de353e1dd886484e48f5d05",
     "vintedUrl": "https://www.vinted.it/items/10209121539-mario-activity-book",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 15,
     "dealScore": "GOOD",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
+    "discoveredAt": 1790887735000,
     "isNewDrop": true
   },
   {
@@ -191,10 +191,10 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/05_01b82_bFndJ5PyiEPkENo26LmucHSK/310x430/616f82a0.webp?s=53264d7f7f00cb26d8e084d4f7906d5a62019a67",
     "vintedUrl": "https://www.vinted.it/items/10209119558-vintage-players-strategy-guide-to-nintendo-games-magazine-june-1991-rare-275",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 18,
     "dealScore": "GOOD",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
+    "discoveredAt": 1790887732000,
     "isNewDrop": true
   },
   {
@@ -219,10 +219,10 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/06_01612_zxfeiVd6m9sNuUjYAEC2XrE7/310x430/83e9e257.webp?s=6aad9601fe462be93099bd85ef3441eaaa711b96",
     "vintedUrl": "https://www.vinted.it/items/10209108196-top-gear-rally-nintendo-64-cart-only",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 21,
     "dealScore": "GOOD",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
+    "discoveredAt": 1790887729000,
     "isNewDrop": true
   },
   {
@@ -247,11 +247,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/03_01f03_zKfi93H2f9JPS9ebnhLTheHN/310x430/903b0a30.webp?s=80d1cd6a353e1c7d37e59366fa3046bcbafc4396",
     "vintedUrl": "https://www.vinted.it/items/10209102643-nintendo-ds-pokemon-white-cib",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 24,
     "dealScore": "GOOD",
     "likesCount": 1,
-    "discoveredAt": 1790887750240,
-    "isNewDrop": true
+    "discoveredAt": 1790887726000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209101824",
@@ -275,11 +275,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/05_01f44_Qadw4R613jngEQ6jGEzLcUxm/310x430/e4eac783.webp?s=1b842d416a9e76fc1865925018d6126340fe77a4",
     "vintedUrl": "https://www.vinted.it/items/10209101824-girls-official-nintendo-super-mario-princess-peach-all-over-print-t-shirt-size-small-6-7-yrs",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 27,
     "dealScore": "GOOD",
     "likesCount": 0,
-    "discoveredAt": 1790887750240,
-    "isNewDrop": true
+    "discoveredAt": 1790887723000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125825",
@@ -303,11 +303,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_0238d_zXByDgACpDWLRpnjpcBVh3RW/310x430/1531d37d.webp?s=529007e63a4bec8273a4bd0bea7d4a5cd6626fce",
     "vintedUrl": "https://www.vinted.it/items/10209125825-nike-shirt",
-    "publishedSecondsAgo": 114,
+    "publishedSecondsAgo": 30,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790888236878,
-    "isNewDrop": true
+    "discoveredAt": 1790887720000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125631",
@@ -331,11 +331,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_01a6e_hvY5uiwaCgNjtKov95F5uCqK/310x430/e158447a.webp?s=8f9f6dae8272f03cd5a38ade6bc9cd7efc3ad489",
     "vintedUrl": "https://www.vinted.it/items/10209125631-vintage-nike-top",
-    "publishedSecondsAgo": 405,
+    "publishedSecondsAgo": 33,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887945878,
-    "isNewDrop": true
+    "discoveredAt": 1790887717000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125570",
@@ -359,11 +359,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_00403_VCY9wZKHvN9Xw6C2kS6dDvv1/310x430/fa03b5b6.webp?s=c14c1093547e47128a6048994e2138da2010f094",
     "vintedUrl": "https://www.vinted.it/items/10209125570-nike-lebron-xix",
-    "publishedSecondsAgo": 497,
+    "publishedSecondsAgo": 36,
     "dealScore": "FAIR",
     "likesCount": 0,
-    "discoveredAt": 1790887853878,
-    "isNewDrop": true
+    "discoveredAt": 1790887714000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125528",
@@ -387,11 +387,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/01_00aa0_BxGBvT3dQ3wEg4cLS6N21M9i/310x430/87a8acae.webp?s=e4e521340aaf884461274fece8df6e3840aff214",
     "vintedUrl": "https://www.vinted.it/items/10209125528-mens-nike-air-force-sneakers-multi-color",
-    "publishedSecondsAgo": 560,
+    "publishedSecondsAgo": 39,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887790878,
-    "isNewDrop": true
+    "discoveredAt": 1790887711000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125519",
@@ -415,11 +415,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/01_025bf_TRfdpr6DoCUsWQSB3wnB6ma9/310x430/072227de.webp?s=ac28996859577deef6d1a24822a683b478ccafe7",
     "vintedUrl": "https://www.vinted.it/items/10209125519-nike-therma-fit-zipper-hoodie",
-    "publishedSecondsAgo": 573,
+    "publishedSecondsAgo": 42,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887777878,
-    "isNewDrop": true
+    "discoveredAt": 1790887708000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209122586",
@@ -443,11 +443,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_01436_SLp1QjdWAFZSSAmtT7f5ioFd/310x430/f63c1261.webp?s=addf8c98fda2d3ac383dc5704f35623b79e4fcfb",
     "vintedUrl": "https://www.vinted.it/items/10209122586-nike-react-size-9-ladies",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 45,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887750879,
-    "isNewDrop": true
+    "discoveredAt": 1790887705000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209122894",
@@ -471,11 +471,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/01_00e00_V1QNQNLsKDMx3BoFdi9iy2qd/310x430/932a943b.webp?s=2e5eae7533a3d3840d0c7ae214d09cd6d645a2e0",
     "vintedUrl": "https://www.vinted.it/items/10209122894-nike-metcon-running-shoes",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 48,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887750879,
-    "isNewDrop": true
+    "discoveredAt": 1790887702000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209122443",
@@ -499,11 +499,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_02532_E2stJH4XeSMzFTx1Qv8eQgdM/310x430/da1ec903.webp?s=51da42c29d788ce02adb84b1435e68b7ebbe6aea",
     "vintedUrl": "https://www.vinted.it/items/10209122443-nike-brazil-football-shirt",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 51,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887750879,
-    "isNewDrop": true
+    "discoveredAt": 1790887699000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209122425",
@@ -527,11 +527,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_01180_r4ZM3dT9JdVkrC2GQMrb2rHd/310x430/633f9b1e.webp?s=de5a0489c5b3508c7d009e45e73b0c5efd7b7192",
     "vintedUrl": "https://www.vinted.it/items/10209122425-nike-air-force-1",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 54,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887750879,
-    "isNewDrop": true
+    "discoveredAt": 1790887696000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209124643",
@@ -555,11 +555,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/06_000ee_tpsS11MYAyxPGvRMamzBjwnm/310x430/e83e0f36.webp?s=14dfca524d4ffa730f7c51a09973d882886d4eef",
     "vintedUrl": "https://www.vinted.it/items/10209124643-nfl-nike-youth-seahawks-russell-wilson-jersey-size-l",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 57,
     "dealScore": "GOOD",
     "likesCount": 0,
-    "discoveredAt": 1790887750879,
-    "isNewDrop": true
+    "discoveredAt": 1790887693000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209123126",
@@ -583,11 +583,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/01_003a1_UbURJzHQ3PgFzypDVN5TZ3YR/310x430/383586f3.webp?s=8c2b4c6d81f1b99f5aa83c48cdb777fff9400353",
     "vintedUrl": "https://www.vinted.it/items/10209123126-trapstar-hoodie-n",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 60,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887751542,
-    "isNewDrop": true
+    "discoveredAt": 1790887690000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209122854",
@@ -611,11 +611,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/06_00f65_wVrLzcTmjqGs9mshAvwNjqju/310x430/5800e97a.webp?s=6cd91fe00f195df92cc13fd10afe01a1952681e2",
     "vintedUrl": "https://www.vinted.it/items/10209122854-trapstar-pouch",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 63,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887751542,
-    "isNewDrop": true
+    "discoveredAt": 1790887687000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209118700",
@@ -639,11 +639,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/01_0085f_XwVqHSDbLPktBqiaGtG2GwBX/310x430/2177c82f.webp?s=db120d4b471eb90cc383f10d7601d16ab3ed6715",
     "vintedUrl": "https://www.vinted.it/items/10209118700-black-trapstar-shooters-track-set-size-s",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 66,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887751542,
-    "isNewDrop": true
+    "discoveredAt": 1790887684000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209126079",
@@ -667,11 +667,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_00cf3_mC2a6CNxNgjUdSjyLC7DuAZY/310x430/85f1fd21.webp?s=cdf888a5906072c91babb2cebc4f2ef3be81095d",
     "vintedUrl": "https://www.vinted.it/items/10209126079-s-ralph-lauren",
-    "publishedSecondsAgo": 48,
+    "publishedSecondsAgo": 69,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790888304213,
-    "isNewDrop": true
+    "discoveredAt": 1790887681000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125902",
@@ -695,11 +695,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/05_01d69_vD94ubrA13re5Swy18NNEBwZ/310x430/616de1bc.webp?s=1752fee111aae0d80e5e342f37a7d6c6fa31ff01",
     "vintedUrl": "https://www.vinted.it/items/10209125902-ralph-lauren-zip-up-vest",
-    "publishedSecondsAgo": 314,
+    "publishedSecondsAgo": 72,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790888038213,
-    "isNewDrop": true
+    "discoveredAt": 1790887678000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125175",
@@ -723,11 +723,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_0077c_oecZodf21ZdgSHBf7AwNLnmb/310x430/520c5842.webp?s=9858581371ede551565826299084a70a327d717b",
     "vintedUrl": "https://www.vinted.it/items/10209125175-lauren-ralph-lauren-charcoal-grey-smart-formal-suit-trousers-w40-l31",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 75,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887752213,
-    "isNewDrop": true
+    "discoveredAt": 1790887675000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125554",
@@ -751,11 +751,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/02_00ac3_mSvu1tM46pM5HETyw6gV7ptz/310x430/c986948f.webp?s=5a6ed6bf74c85eb1e0b5dbd823625a96dcce347c",
     "vintedUrl": "https://www.vinted.it/items/10209125554-ralph-lauren-men-polo-shirt-size-m",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 78,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887752213,
-    "isNewDrop": true
+    "discoveredAt": 1790887672000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209125425",
@@ -779,11 +779,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/01_021ea_hc3axETxgYzDjYijEY13261X/310x430/be9ea127.webp?s=9fe68d149de835ff50877a291bffedaf59d71683",
     "vintedUrl": "https://www.vinted.it/items/10209125425-ralph-lauren-polo-vest",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 81,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887752213,
-    "isNewDrop": true
+    "discoveredAt": 1790887669000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209122399",
@@ -807,11 +807,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/01_01f5d_mz7qjnXqPmuMAneYxqYGbY7T/310x430/af7ee2b8.webp?s=f5bac2bbb38569f648a2e6556cccb55d6175ee01",
     "vintedUrl": "https://www.vinted.it/items/10209122399-ralph-lauren-long-sleeve",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 84,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887752213,
-    "isNewDrop": true
+    "discoveredAt": 1790887666000,
+    "isNewDrop": false
   },
   {
     "id": "vnt-10209120458",
@@ -835,11 +835,11 @@ export const INITIAL_LISTINGS: VintedListing[] = [
     },
     "imageUrl": "https://images1.vinted.net/t/05_01410_fSHUYkGXQUcEPtNaw4M8fScr/310x430/c75a1d33.webp?s=ca0e32d3e272f28439799015ab836dc22e4669ef",
     "vintedUrl": "https://www.vinted.it/items/10209120458-ralph-lauren-long-sleeve-button-up",
-    "publishedSecondsAgo": 600,
+    "publishedSecondsAgo": 87,
     "dealScore": "STEAL",
     "likesCount": 0,
-    "discoveredAt": 1790887752213,
-    "isNewDrop": true
+    "discoveredAt": 1790887663000,
+    "isNewDrop": false
   }
 ];
 
