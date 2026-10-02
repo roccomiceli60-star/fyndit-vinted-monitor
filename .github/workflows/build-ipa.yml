@@ -1,0 +1,111 @@
+name: Build iOS IPA Package (Fyndit)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ipa:
+    name: Compile Fyndit.ipa (iOS ARM64)
+    runs-on: macos-14
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify or Build Web Application
+        run: |
+          if [ -d "dist" ] && [ -f "dist/index.html" ]; then
+            echo "✓ Pre-compiled web distribution (dist/) verified. Using existing build."
+          else
+            echo "Building web application..."
+            npm install --legacy-peer-deps --no-package-lock
+            npm install @rolldown/binding-darwin-arm64 --save-optional || true
+            npm run build
+          fi
+
+      - name: Select Xcode Version
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Compile Native iOS ARM64 Binary
+        run: |
+          echo "Compiling Swift native iOS ARM64 binary..."
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "Using iPhoneOS SDK at: $SDK_PATH"
+          
+          xcrun --sdk iphoneos swiftc \
+            -target arm64-apple-ios15.0 \
+            -sdk "$SDK_PATH" \
+            -framework UIKit \
+            -framework WebKit \
+            -framework Foundation \
+            -O -whole-module-optimization \
+            -o Fyndit \
+            ios/Fyndit/AppDelegate.swift ios/Fyndit/ViewController.swift ios/Fyndit/AppSchemeHandler.swift
+            
+          file Fyndit
+          echo "✓ Native ARM64 binary compiled successfully!"
+
+      - name: Assemble iOS IPA Payload Package
+        run: |
+          mkdir -p Payload/Fyndit.app/www
+          
+          # Copy compiled binary
+          cp Fyndit Payload/Fyndit.app/Fyndit
+          chmod +x Payload/Fyndit.app/Fyndit
+          
+          # Copy Info.plist
+          cp ios/Fyndit/Info.plist Payload/Fyndit.app/Info.plist
+          
+          # Copy web dist assets to both root and www
+          cp -r dist/* Payload/Fyndit.app/
+          cp -r dist/* Payload/Fyndit.app/www/
+          
+          # Copy app icons if present
+          if [ -f "src/assets/images/fyndit_icon_1790842000865.jpg" ]; then
+            cp src/assets/images/fyndit_icon_1790842000865.jpg Payload/Fyndit.app/AppIcon60x60@2x.png
+            cp src/assets/images/fyndit_icon_1790842000865.jpg Payload/Fyndit.app/AppIcon60x60@3x.png
+          fi
+          
+          # Create IPA archive
+          zip -r -9 FynditExport.ipa Payload
+          ls -lh FynditExport.ipa
+          echo "✓ FynditExport.ipa package generated successfully!"
+
+      - name: Upload IPA as GitHub Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FynditExport-ipa
+          path: FynditExport.ipa
+          retention-days: 30
+
+      - name: Create GitHub Release with IPA Download
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/')
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Fyndit iOS v1.0.${{ github.run_number }} (IPA Package)
+          body: |
+            ## 📱 Fyndit per iOS (File IPA)
+            
+            Pacchetto IPA pronto per l'installazione su iPhone.
+            
+            ### Istruzioni di installazione:
+            1. Scarica **`FynditExport.ipa`** da questa release.
+            2. Collega il tuo iPhone al computer via cavo USB.
+            3. Apri **Sideloadly** o **AltStore**.
+            4. Trascina il file `FynditExport.ipa` e inserisci il tuo Apple ID per firmarlo gratis.
+            5. Su iPhone vai su **Impostazioni → Generali → VPN e gestione dispositivi** e autorizza lo sviluppatore.
+          files: FynditExport.ipa
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,6 @@
+{
+  "name": "Fyndit - Vinted Bot Monitor, Deal Sniper & Resell Calculator",
+  "description": "Trova affari istantanei su Vinted, monitora annunci in tempo reale, calcola margini di profitto e simula acquisti ultraveloci con Fyndit.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
