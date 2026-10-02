@@ -40,47 +40,31 @@ export default function App() {
   const handleIncomingDrops = useCallback((newItems: VintedListing[]) => {
     if (!newItems || newItems.length === 0) return;
 
-    const searchQ = activeSearchRef.current.toLowerCase().trim();
-    const brandQ = activeBrandRef.current === 'Tutti' ? '' : activeBrandRef.current.toLowerCase().trim();
-    const searchWords = searchQ.split(/\s+/).filter(Boolean);
-
-    const reallyNew: VintedListing[] = [];
-    for (const item of newItems) {
-      if (!seenIdsRef.current.has(item.id)) {
-        seenIdsRef.current.add(item.id);
-        if (searchWords.length > 0 || brandQ) {
-          const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
-          const matchesSearch = searchWords.length === 0 || searchWords.every((w) => itemText.includes(w));
-          const matchesBrand = !brandQ || item.brand.toLowerCase().includes(brandQ) || item.title.toLowerCase().includes(brandQ);
-          if (matchesSearch && matchesBrand) {
-            reallyNew.push({ ...item, isNewDrop: true });
-          }
-        } else {
-          reallyNew.push({ ...item, isNewDrop: true });
-        }
-      }
-    }
-
-    if (reallyNew.length === 0) return;
-
     setListings((prev) => {
-      return [
-        ...reallyNew,
-        ...prev.filter((i) => !reallyNew.some((rn) => rn.id === i.id)),
-      ].slice(0, 150);
-    });
+      const prevIds = new Set(prev.map((i) => i.id));
+      const brandNew = newItems
+        .filter((i) => !prevIds.has(i.id))
+        .map((i) => ({ ...i, isNewDrop: true }));
 
-    setNewDealsCount((c) => c + reallyNew.length);
+      if (brandNew.length === 0) return prev;
+
+      setNewDealsCount((c) => c + brandNew.length);
+      return [...brandNew, ...prev].slice(0, 150);
+    });
   }, []);
 
-  // Real-time SSE Connection with Autonomous Mobile Fallback
+  // Real-time SSE Connection with Query Subscription (Real-time Drops for Search & Home)
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let sseTimeout: NodeJS.Timeout | null = null;
 
     function connectSSE() {
       try {
-        eventSource = new EventSource('/api/vinted/stream');
+        const streamUrl = new URL('/api/vinted/stream', window.location.origin);
+        if (activeSearch.trim()) streamUrl.searchParams.set('search', activeSearch.trim());
+        if (activeBrand && activeBrand !== 'Tutti') streamUrl.searchParams.set('brand', activeBrand);
+
+        eventSource = new EventSource(streamUrl.toString());
 
         eventSource.onopen = () => {
           isSseConnectedRef.current = true;
@@ -119,7 +103,6 @@ export default function App() {
 
     connectSSE();
 
-    // Check if SSE connected, if not, activate autonomous live stream
     sseTimeout = setTimeout(() => {
       setIsLiveConnected(true);
     }, 1000);
@@ -128,7 +111,7 @@ export default function App() {
       if (eventSource) eventSource.close();
       if (sseTimeout) clearTimeout(sseTimeout);
     };
-  }, [handleIncomingDrops]);
+  }, [handleIncomingDrops, activeSearch, activeBrand]);
 
   // Active real-time drop poller for standalone iOS & live feed with continuous autorefresh
   const fetchLiveRealtimeDrops = useCallback(async (manual = false) => {
@@ -155,36 +138,27 @@ export default function App() {
 
           if (data.items.length > 0) {
             setListings((prev) => {
-              // If previous was empty, directly set incoming items
-              if (prev.length === 0) {
-                for (const it of data.items) seenIdsRef.current.add(it.id);
-                return data.items;
-              }
+              if (prev.length === 0) return data.items;
 
-              // Detect genuine new drops that weren't in previous listings
               const prevMap = new Map(prev.map((p) => [p.id, p]));
-              const brandNewItems: VintedListing[] = [];
+              const incomingIds = new Set(data.items.map((i: VintedListing) => i.id));
 
-              for (const it of data.items) {
-                if (!prevMap.has(it.id) && !seenIdsRef.current.has(it.id)) {
-                  seenIdsRef.current.add(it.id);
-                  brandNewItems.push({ ...it, isNewDrop: true });
+              // Map incoming items, assigning isNewDrop to genuine drops
+              const updatedList: VintedListing[] = data.items.map((incoming: VintedListing) => {
+                const existing = prevMap.get(incoming.id);
+                if (!existing) {
+                  return { ...incoming, isNewDrop: true };
                 }
+                return existing.isNewDrop ? { ...incoming, isNewDrop: true } : incoming;
+              });
+
+              const brandNewCount = updatedList.filter((it) => it.isNewDrop && !prevMap.has(it.id)).length;
+              if (brandNewCount > 0) {
+                setNewDealsCount((c) => c + brandNewCount);
               }
 
-              if (brandNewItems.length > 0) {
-                setNewDealsCount((c) => c + brandNewItems.length);
-                return [...brandNewItems, ...prev].slice(0, 150);
-              }
-
-              // If actively searching or filtering, continuously refresh order with latest live results
-              if (searchQ || (brandQ && brandQ !== 'Tutti')) {
-                const incomingIds = new Set(data.items.map((i: VintedListing) => i.id));
-                const retained = prev.filter((p) => !incomingIds.has(p.id));
-                return [...data.items, ...retained].slice(0, 150);
-              }
-
-              return prev;
+              const retained = prev.filter((p) => !incomingIds.has(p.id));
+              return [...updatedList, ...retained].slice(0, 150);
             });
           }
         }

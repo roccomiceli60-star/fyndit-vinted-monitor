@@ -56,23 +56,51 @@ let sessionAccessToken = '';
 let lastCookieFetch = 0;
 let highestSeenRawId = 0;
 
-// Set of active Server-Sent Events clients for instant push
-const sseClients = new Set<Response>();
+// Set of active Server-Sent Events subscribers for instant push (supports search subscriptions)
+interface SseSubscriber {
+  res: Response;
+  search: string;
+  brand: string;
+}
+const sseSubscribers = new Set<SseSubscriber>();
 
-function broadcastNewItems(newItems: VintedItem[]) {
-  if (newItems.length === 0 || sseClients.size === 0) return;
-  const payload = JSON.stringify({
-    type: 'NEW_DROPS',
-    timestamp: Date.now(),
-    count: newItems.length,
-    items: newItems,
-  });
+function broadcastNewItems(newItems: VintedItem[], originQuery = '') {
+  if (newItems.length === 0 || sseSubscribers.size === 0) return;
 
-  for (const client of sseClients) {
+  for (const sub of sseSubscribers) {
     try {
-      client.write(`data: ${payload}\n\n`);
+      if (sub.search || (sub.brand && sub.brand !== 'tutti')) {
+        const qWords = sub.search.split(/\s+/).filter(Boolean);
+        const matches = newItems.filter((item) => {
+          if (originQuery && originQuery.toLowerCase() === sub.search.toLowerCase()) return true;
+          const text = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
+          const matchSearch = qWords.length === 0 || qWords.some((w) => text.includes(w));
+          const matchBrand = !sub.brand || sub.brand === 'tutti' || item.brand.toLowerCase().includes(sub.brand) || item.title.toLowerCase().includes(sub.brand);
+          return matchSearch && matchBrand;
+        });
+
+        if (matches.length > 0) {
+          const payload = JSON.stringify({
+            type: 'NEW_DROPS',
+            timestamp: Date.now(),
+            count: matches.length,
+            items: matches,
+          });
+          sub.res.write(`data: ${payload}\n\n`);
+        }
+      } else {
+        if (!originQuery) {
+          const payload = JSON.stringify({
+            type: 'NEW_DROPS',
+            timestamp: Date.now(),
+            count: newItems.length,
+            items: newItems,
+          });
+          sub.res.write(`data: ${payload}\n\n`);
+        }
+      }
     } catch {
-      sseClients.delete(client);
+      sseSubscribers.delete(sub);
     }
   }
 }
@@ -383,26 +411,43 @@ export function touchActiveSearch(q: string) {
 
 async function runActiveSearchSniperWorker() {
   while (true) {
+    const activeQueries = new Set<string>();
+    for (const sub of sseSubscribers) {
+      const q = sub.search || (sub.brand !== 'tutti' ? sub.brand : '');
+      if (q) activeQueries.add(q.toLowerCase());
+    }
     const now = Date.now();
     for (const [q, time] of activeClientSearchQueries.entries()) {
-      if (now - time > 4 * 60 * 1000) {
+      if (now - time < 3 * 60 * 1000) {
+        activeQueries.add(q.toLowerCase());
+      } else {
         activeClientSearchQueries.delete(q);
       }
     }
 
-    const queries = Array.from(activeClientSearchQueries.keys());
-    if (queries.length > 0) {
-      for (const q of queries) {
+    if (activeQueries.size > 0) {
+      for (const q of activeQueries) {
         try {
           const raw = await fetchFromVinted(q);
-          ingestRawItems(raw);
+          const transformed = raw.map(transformVintedItem);
+          const brandNew: VintedItem[] = [];
+          for (const it of transformed) {
+            if (!seenItemIds.has(it.id)) {
+              seenItemIds.add(it.id);
+              brandNew.push(it);
+            }
+          }
+          if (brandNew.length > 0) {
+            realItemsCache = [...brandNew, ...realItemsCache].slice(0, 150);
+            broadcastNewItems(brandNew, q);
+          }
         } catch {
           // ignore
         }
-        await new Promise((r) => setTimeout(r, 600));
+        await new Promise((r) => setTimeout(r, 450));
       }
     } else {
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 650));
     }
   }
 }
@@ -413,8 +458,11 @@ setTimeout(() => runGeneralWorker(2), 450);
 setTimeout(runActiveSearchSniperWorker, 600);
 
 // API Routes
-// 1. SSE Stream: Pushes new items the millisecond they are detected
-app.get('/api/vinted/stream', (_req, res) => {
+// 1. SSE Stream: Pushes new items the millisecond they are detected (with query subscription)
+app.get('/api/vinted/stream', (req, res) => {
+  const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
+  const brand = typeof req.query.brand === 'string' ? req.query.brand.trim().toLowerCase() : '';
+
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -422,32 +470,26 @@ app.get('/api/vinted/stream', (_req, res) => {
     'Access-Control-Allow-Origin': '*',
   });
 
-  const now = Date.now();
-  const freshCache = realItemsCache
-    .filter((i) => now - i.discoveredAt < 20 * 60 * 1000)
-    .slice(0, 40);
+  const subscriber: SseSubscriber = { res, search, brand };
+  sseSubscribers.add(subscriber);
 
-  const initialPayload = JSON.stringify({
-    type: 'INITIAL_STATE',
-    timestamp: now,
-    items: freshCache,
-  });
-
-  res.write(`data: ${initialPayload}\n\n`);
-  sseClients.add(res);
+  if (search || (brand && brand !== 'tutti')) {
+    const q = search || brand;
+    touchActiveSearch(q);
+  }
 
   const pingInterval = setInterval(() => {
     try {
       res.write(`: ping\n\n`);
     } catch {
       clearInterval(pingInterval);
-      sseClients.delete(res);
+      sseSubscribers.delete(subscriber);
     }
-  }, 10000);
+  }, 8000);
 
-  _req.on('close', () => {
+  req.on('close', () => {
     clearInterval(pingInterval);
-    sseClients.delete(res);
+    sseSubscribers.delete(subscriber);
   });
 });
 
@@ -594,7 +636,7 @@ app.get('/api/vinted/status', (_req, res) => {
   res.json({
     status: 'ONLINE',
     totalCached: realItemsCache.length,
-    activeStreamListeners: sseClients.size,
+    activeStreamListeners: sseSubscribers.size,
     sessionActive: Boolean(sessionCookieHeader && sessionAccessToken),
     lastCookieUpdate: new Date(lastCookieFetch).toISOString(),
     highestSeenRawId,
