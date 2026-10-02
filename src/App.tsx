@@ -130,7 +130,7 @@ export default function App() {
     };
   }, [handleIncomingDrops]);
 
-  // Active real-time drop poller for standalone iOS & live feed
+  // Active real-time drop poller for standalone iOS & live feed with continuous autorefresh
   const fetchLiveRealtimeDrops = useCallback(async (manual = false) => {
     if (manual) setIsRefreshing(true);
     try {
@@ -150,17 +150,43 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.items && Array.isArray(data.items) && data.items.length > 0) {
-          // If searching or filtering and listings is empty or small, populate immediately
-          setListings((prev) => {
-            if (prev.length === 0 || ((searchQ || (brandQ && brandQ !== 'Tutti')) && prev.length < 5)) {
-              for (const it of data.items) seenIdsRef.current.add(it.id);
-              return data.items;
-            }
-            return prev;
-          });
-          handleIncomingDrops(data.items);
+        if (data.items && Array.isArray(data.items)) {
           setLatencyMs(Math.max(1, data.latencyMs || 2));
+
+          if (data.items.length > 0) {
+            setListings((prev) => {
+              // If previous was empty, directly set incoming items
+              if (prev.length === 0) {
+                for (const it of data.items) seenIdsRef.current.add(it.id);
+                return data.items;
+              }
+
+              // Detect genuine new drops that weren't in previous listings
+              const prevMap = new Map(prev.map((p) => [p.id, p]));
+              const brandNewItems: VintedListing[] = [];
+
+              for (const it of data.items) {
+                if (!prevMap.has(it.id) && !seenIdsRef.current.has(it.id)) {
+                  seenIdsRef.current.add(it.id);
+                  brandNewItems.push({ ...it, isNewDrop: true });
+                }
+              }
+
+              if (brandNewItems.length > 0) {
+                setNewDealsCount((c) => c + brandNewItems.length);
+                return [...brandNewItems, ...prev].slice(0, 150);
+              }
+
+              // If actively searching or filtering, continuously refresh order with latest live results
+              if (searchQ || (brandQ && brandQ !== 'Tutti')) {
+                const incomingIds = new Set(data.items.map((i: VintedListing) => i.id));
+                const retained = prev.filter((p) => !incomingIds.has(p.id));
+                return [...data.items, ...retained].slice(0, 150);
+              }
+
+              return prev;
+            });
+          }
         }
       }
     } catch {
@@ -168,7 +194,7 @@ export default function App() {
     } finally {
       if (manual) setTimeout(() => setIsRefreshing(false), 400);
     }
-  }, [handleIncomingDrops]);
+  }, []);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -176,10 +202,10 @@ export default function App() {
     // Immediate fetch
     fetchLiveRealtimeDrops(false);
 
-    // Guaranteed real-time 750ms ultra-fast pulse interval
+    // Guaranteed real-time 800ms ultra-fast pulse interval
     const interval = setInterval(() => {
       fetchLiveRealtimeDrops(false);
-    }, 750);
+    }, 800);
 
     return () => clearInterval(interval);
   }, [autoRefresh, fetchLiveRealtimeDrops]);
@@ -217,7 +243,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setLatencyMs(Math.max(1, Date.now() - start));
-        if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+        if (data.items && Array.isArray(data.items)) {
           setListings(data.items);
           for (const item of data.items) {
             seenIdsRef.current.add(item.id);

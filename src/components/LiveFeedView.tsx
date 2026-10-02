@@ -262,21 +262,22 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
 
   // Client-side refined filtering (1 to 1 with Vinted parameters)
   const displayedListings = useMemo(() => {
+    const isActivelySearching = Boolean(searchInput.trim());
+    const searchWords = searchInput.toLowerCase().trim().split(/\s+/).filter(Boolean);
+
     return listings
       .filter((item) => {
         // Under 50€ price filter
         if (underFifty && item.price > 50) return false;
 
-        // Freshness filter (under 20 minutes)
-        if (onlyRecentDrops && item.publishedSecondsAgo > 1200) return false;
+        // Freshness filter: only applies to general drop feed when not searching for specific keywords
+        if (onlyRecentDrops && !isActivelySearching && item.publishedSecondsAgo > 1200) return false;
 
-        // Search text filter
-        if (searchInput.trim()) {
-          const q = searchInput.toLowerCase().trim();
-          const matchTitle = item.title.toLowerCase().includes(q);
-          const matchBrand = item.brand.toLowerCase().includes(q);
-          const matchCategory = item.category.toLowerCase().includes(q);
-          if (!matchTitle && !matchBrand && !matchCategory) return false;
+        // Search text filter: checks tokens across title, brand, category, condition, size
+        if (isActivelySearching && searchWords.length > 0) {
+          const fullText = `${item.title} ${item.brand} ${item.category} ${item.size} ${item.condition}`.toLowerCase();
+          const matches = searchWords.every((w) => fullText.includes(w));
+          if (!matches) return false;
         }
 
         // Category filter
