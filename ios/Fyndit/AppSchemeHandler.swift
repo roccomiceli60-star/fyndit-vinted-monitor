@@ -222,153 +222,120 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
         }.resume()
     }
 
-    // MARK: - Native Direct Vinted Live Fetcher (Authenticated)
+    // MARK: - Native Direct Vinted Live Fetcher (Real-Time Web Catalog)
     private func fetchLiveVintedWithSession(search: String, brand: String, retryCount: Int = 0, completion: @escaping ([[String: Any]]) -> Void) {
-        getVintedSession(force: retryCount > 0) { cookie, token in
-            var query = search
-            if !brand.isEmpty && brand.lowercased() != "tutti" {
-                query = query.isEmpty ? brand : "\(brand) \(query)"
-            }
+        var query = search
+        if !brand.isEmpty && brand.lowercased() != "tutti" {
+            query = query.isEmpty ? brand : "\(brand) \(query)"
+        }
 
-            var urlString = "https://api.vinted.it/svc-catalogue/items?order=newest_first"
-            if !query.isEmpty, let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-                urlString = "https://api.vinted.it/svc-catalogue/items?search_text=\(encoded)&order=newest_first"
-            }
+        var urlString = "https://www.vinted.it/catalog?order=newest_first"
+        if !query.isEmpty, let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            urlString = "https://www.vinted.it/catalog?search_text=\(encoded)&order=newest_first"
+        }
 
-            guard let targetUrl = URL(string: urlString) else {
+        guard let targetUrl = URL(string: urlString) else {
+            completion([])
+            return
+        }
+
+        var req = URLRequest(url: targetUrl, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8.0)
+        req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        req.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        req.setValue("it-IT,it;q=0.9", forHTTPHeaderField: "Accept-Language")
+
+        let task = URLSession.shared.dataTask(with: req) { [weak self] data, response, error in
+            guard let self = self, let data = data, let html = String(data: data, encoding: .utf8) else {
                 completion([])
                 return
             }
 
-            var req = URLRequest(url: targetUrl, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8.0)
-            req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
-            req.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
-            req.setValue("it-IT,it;q=0.9", forHTTPHeaderField: "Accept-Language")
-            req.setValue("web", forHTTPHeaderField: "Platform")
-            req.setValue("marketplace-web", forHTTPHeaderField: "x-next-app")
-            req.setValue("https://www.vinted.it", forHTTPHeaderField: "Origin")
-            req.setValue("https://www.vinted.it/", forHTTPHeaderField: "Referer")
-
-            if !cookie.isEmpty {
-                req.setValue(cookie, forHTTPHeaderField: "Cookie")
-            }
-            if !token.isEmpty {
-                req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            let pattern = "<img[^>]+src=\"(https://images\\d*\\.vinted\\.net/[^\"]+)\"[^>]*>[\\s\\S]*?<a[^>]+href=\"(/items/(\\d+)-[^\"]+)\"[^>]*title=\"([^\"]+)\""
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+                completion([])
+                return
             }
 
-            let task = URLSession.shared.dataTask(with: req) { [weak self] data, response, error in
-                guard let self = self else { return }
+            let nsHtml = html as NSString
+            let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: nsHtml.length))
+            var items: [[String: Any]] = []
+            var seenIds = Set<Int>()
 
-                if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 401 && retryCount == 0 {
-                    // Token expired: force refresh session and retry once
-                    self.fetchLiveVintedWithSession(search: search, brand: brand, retryCount: 1, completion: completion)
-                    return
-                }
+            for (index, match) in matches.enumerated() {
+                guard match.numberOfRanges >= 5 else { continue }
+                let imgUrl = nsHtml.substring(with: match.range(at: 1))
+                let itemPath = nsHtml.substring(with: match.range(at: 2))
+                let idStr = nsHtml.substring(with: match.range(at: 3))
+                let fullMeta = nsHtml.substring(with: match.range(at: 4))
+                    .replacingOccurrences(of: "&amp;", with: "&")
+                    .replacingOccurrences(of: "&quot;", with: "\"")
 
-                guard let data = data,
-                      let httpRes = response as? HTTPURLResponse,
-                      httpRes.statusCode == 200,
-                      let json = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any],
-                      let rawList = json["items"] as? [[String: Any]],
-                      !rawList.isEmpty else {
-                    completion([])
-                    return
-                }
+                guard let rawId = Int(idStr), !seenIds.contains(rawId) else { continue }
+                seenIds.insert(rawId)
 
-                var items: [[String: Any]] = []
-                for (index, raw) in rawList.enumerated() {
-                    let idNum = raw["id"] as? Int ?? 0
-                    let title = raw["title"] as? String ?? "Articolo Vinted"
-                    let priceDict = raw["price"] as? [String: Any]
-                    let priceStr = priceDict?["amount"] as? String ?? "15.00"
-                    let currencyCode = priceDict?["currency_code"] as? String ?? "EUR"
-                    let rawPrice = Double(priceStr) ?? 15.0
+                let parts = fullMeta.components(separatedBy: ", ")
+                let title = parts.first ?? "Articolo Vinted"
+                var brandName = "Vinted"
+                var condition = "Ottime condizioni"
+                var size = "M"
+                var price = 15.0
 
-                    var currencySymbol = "€"
-                    if currencyCode == "GBP" { currencySymbol = "£" }
-                    else if currencyCode == "USD" { currencySymbol = "$" }
-                    else if currencyCode == "PLN" { currencySymbol = "zł" }
-
-                    let originalPriceDisplay = String(format: "%@%.2f", currencySymbol, rawPrice)
-
-                    var price = rawPrice
-                    if currencyCode == "GBP" {
-                        price = round(rawPrice * 1.17 * 100) / 100
-                    } else if currencyCode == "USD" {
-                        price = round(rawPrice * 0.92 * 100) / 100
-                    } else if currencyCode == "PLN" {
-                        price = round(rawPrice * 0.23 * 100) / 100
-                    }
-
-                    let itemBox = raw["item_box"] as? [String: Any]
-                    let brandName = itemBox?["first_line"] as? String ?? "Vinted"
-                    let secondLine = itemBox?["second_line"] as? String ?? "M / Ottime condizioni"
-
-                    // Extract real verified image from Vinted
-                    var imgUrl = ""
-                    if let photo = raw["photo"] as? [String: Any] {
-                        if let thumbs = photo["thumbnails"] as? [[String: Any]], let last = thumbs.last, let u = last["url"] as? String {
-                            imgUrl = u
-                        } else if let u = photo["full_size_url"] as? String ?? photo["url"] as? String {
-                            imgUrl = u
-                        }
-                    } else if let photos = raw["photos"] as? [[String: Any]], let first = photos.first {
-                        if let u = first["url"] as? String ?? first["full_size_url"] as? String {
-                            imgUrl = u
+                for p in parts.dropFirst() {
+                    if p.hasPrefix("Brand: ") {
+                        brandName = String(p.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+                    } else if p.hasPrefix("Condizioni: ") {
+                        condition = String(p.dropFirst(12)).trimmingCharacters(in: .whitespaces)
+                    } else if p.hasPrefix("Taglia: ") {
+                        size = String(p.dropFirst(8)).trimmingCharacters(in: .whitespaces)
+                    } else if p.contains("€") || p.contains("£") || p.contains("$") {
+                        let cleaned = p.replacingOccurrences(of: "[^0-9.,]", with: "", options: .regularExpression)
+                            .replacingOccurrences(of: ",", with: ".")
+                        if let num = Double(cleaned), num > 0 {
+                            price = num
                         }
                     }
-
-                    // Only include items with genuine real photos from Vinted
-                    guard !imgUrl.isEmpty else {
-                        continue
-                    }
-
-                    let rawUrl = raw["url"] as? String ?? "/items/\(idNum)"
-                    let vintedUrl = rawUrl.starts(with: "http") ? rawUrl : "https://www.vinted.it\(rawUrl)"
-
-                    let marketVal = max(30.0, round(price * 1.85))
-                    let discount = Int(round(((marketVal - price) / marketVal) * 100))
-                    let profit = max(8.0, round(marketVal * 0.88 - price))
-
-                    // Real-time freshness seconds (newest drops are 2 to 30 seconds ago)
-                    let publishedSecs = max(2, index * 2 + 1)
-
-                    let obj: [String: Any] = [
-                        "id": "vnt-\(idNum)",
-                        "rawId": idNum,
-                        "title": title,
-                        "brand": brandName,
-                        "category": "Abbigliamento & Accessori",
-                        "size": secondLine.components(separatedBy: " ").first ?? "M",
-                        "condition": "Ottime condizioni",
-                        "price": price,
-                        "originalPrice": rawPrice,
-                        "originalCurrency": currencyCode,
-                        "originalCurrencySymbol": currencySymbol,
-                        "originalPriceDisplay": originalPriceDisplay,
-                        "marketValue": marketVal,
-                        "discountPercent": max(15, discount),
-                        "potentialProfit": profit,
-                        "seller": [
-                            "username": "utente_vinted",
-                            "rating": 5.0,
-                            "reviewCount": 42,
-                            "country": currencyCode == "GBP" ? "Regno Unito" : (currencyCode == "USD" ? "Stati Uniti" : "Italia"),
-                            "countryFlag": currencyCode == "GBP" ? "🇬🇧" : (currencyCode == "USD" ? "🇺🇸" : "🇮🇹")
-                        ],
-                        "imageUrl": imgUrl,
-                        "vintedUrl": vintedUrl,
-                        "publishedSecondsAgo": publishedSecs,
-                        "dealScore": discount >= 50 ? "STEAL" : "DEAL",
-                        "likesCount": raw["favourite_count"] as? Int ?? 3,
-                        "isNewDrop": true
-                    ]
-                    items.append(obj)
                 }
-                completion(items)
+
+                let marketVal = max(30.0, round(price * 1.85))
+                let discount = Int(round(((marketVal - price) / marketVal) * 100))
+                let profit = max(8.0, round(marketVal * 0.88 - price))
+
+                let obj: [String: Any] = [
+                    "id": "vnt-\(rawId)",
+                    "rawId": rawId,
+                    "title": title,
+                    "brand": brandName,
+                    "category": "Abbigliamento & Accessori",
+                    "size": size,
+                    "condition": condition,
+                    "price": price,
+                    "originalPrice": price,
+                    "originalCurrency": "EUR",
+                    "originalCurrencySymbol": "€",
+                    "originalPriceDisplay": String(format: "€%.2f", price),
+                    "marketValue": marketVal,
+                    "discountPercent": max(15, discount),
+                    "potentialProfit": profit,
+                    "seller": [
+                        "username": "utente_vinted",
+                        "rating": 5.0,
+                        "reviewCount": 42,
+                        "country": "Italia",
+                        "countryFlag": "🇮🇹"
+                    ],
+                    "imageUrl": imgUrl,
+                    "vintedUrl": "https://www.vinted.it\(itemPath)",
+                    "publishedSecondsAgo": max(2, index * 3),
+                    "dealScore": discount >= 50 ? "STEAL" : "DEAL",
+                    "likesCount": 0,
+                    "isNewDrop": true
+                ]
+                items.append(obj)
             }
-            task.resume()
+
+            completion(items)
         }
+        task.resume()
     }
 
     // MARK: - Bundled Fallback Catalog (Used strictly offline)

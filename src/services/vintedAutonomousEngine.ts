@@ -1502,12 +1502,7 @@ export function generateNextAutonomousDrop(): VintedListing {
 }
 
 export function searchClientItems(query: string, brand: string, currentPool: VintedListing[]): VintedListing[] {
-  const allCandidates = [...currentPool, ...REAL_DROPS_POOL, ...INITIAL_LISTINGS];
-  const uniqueMap = new Map<string, VintedListing>();
-  for (const it of allCandidates) {
-    uniqueMap.set(it.id, it);
-  }
-  let results = Array.from(uniqueMap.values());
+  let results = [...currentPool];
 
   const q = query.toLowerCase().trim();
   if (q) {
@@ -1525,11 +1520,7 @@ export function searchClientItems(query: string, brand: string, currentPool: Vin
     );
   }
 
-  return results.map((it, idx) => ({
-    ...it,
-    publishedSecondsAgo: Math.max(2, idx * 3 + 1),
-    isNewDrop: idx < 5,
-  }));
+  return results;
 }
 
 export function playAlertChime() {

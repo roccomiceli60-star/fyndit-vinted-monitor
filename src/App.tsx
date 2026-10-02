@@ -7,11 +7,11 @@ import { GuidesView } from './components/GuidesView';
 import { IpaExportView } from './components/IpaExportView';
 import { INITIAL_LISTINGS, INITIAL_MONITORS } from './data/mockDeals';
 import { VintedListing, VintedMonitor } from './types';
-import { generateNextAutonomousDrop, searchClientItems, playAlertChime } from './services/vintedAutonomousEngine';
+import { playAlertChime } from './services/vintedAutonomousEngine';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
-  const [listings, setListings] = useState<VintedListing[]>(INITIAL_LISTINGS);
+  const [listings, setListings] = useState<VintedListing[]>([]);
   const [monitors, setMonitors] = useState<VintedMonitor[]>(INITIAL_MONITORS);
   const [newDealsCount, setNewDealsCount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -230,10 +230,6 @@ export default function App() {
     } finally {
       setIsSearching(false);
     }
-
-    // Client fallback if network was unreachable
-    setListings((prev) => searchClientItems(search, brand, prev));
-    setLatencyMs(1);
   }, []);
 
   const handleAutocopItem = (item: VintedListing) => {
