@@ -263,25 +263,28 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   // Client-side refined filtering (1 to 1 with Vinted parameters)
   const displayedListings = useMemo(() => {
     const isActivelySearching = Boolean(searchInput.trim());
-    const searchWords = searchInput.toLowerCase().trim().split(/\s+/).filter(Boolean);
 
     return listings
       .filter((item) => {
         // Under 50€ price filter
         if (underFifty && item.price > 50) return false;
 
-        // Freshness filter: only applies to general drop feed when not searching for specific keywords
-        if (onlyRecentDrops && !isActivelySearching && item.publishedSecondsAgo > 1200) return false;
+        // Price range
+        const minP = parseFloat(minPrice);
+        if (!isNaN(minP) && minP > 0 && item.price < minP) return false;
+        const maxP = parseFloat(maxPrice);
+        if (!isNaN(maxP) && maxP > 0 && item.price > maxP) return false;
 
-        // Client-side text filter: only applies while typing before server search completes
-        const isLocallyTyping = isActivelySearching && searchInput.trim().toLowerCase() !== currentSearch.trim().toLowerCase();
-        if (isLocallyTyping && searchWords.length > 0) {
-          const fullText = `${item.title} ${item.brand} ${item.category} ${item.size} ${item.condition}`.toLowerCase();
-          const matches = searchWords.some((w) => fullText.includes(w));
-          if (!matches) return false;
+        // When actively searching via free-text input, display Vinted search results directly
+        // without restricting to previous category or brand selections
+        if (isActivelySearching) {
+          return true;
         }
 
-        // Category filter
+        // Freshness filter: only applies to general drop feed when not searching for specific keywords
+        if (onlyRecentDrops && item.publishedSecondsAgo > 1200) return false;
+
+        // Category filter (in general feed when not free-text searching)
         if (selectedCategory !== 'all') {
           const itemCat = item.category.toLowerCase();
           const itemTitle = item.title.toLowerCase();
@@ -345,19 +348,13 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
           if (!matchColor) return false;
         }
 
-        // Price range
-        const minP = parseFloat(minPrice);
-        if (!isNaN(minP) && minP > 0 && item.price < minP) return false;
-        const maxP = parseFloat(maxPrice);
-        if (!isNaN(maxP) && maxP > 0 && item.price > maxP) return false;
-
         return true;
       })
       .sort((a, b) => {
         if (sortBy === 'price_asc') return a.price - b.price;
         if (sortBy === 'price_desc') return b.price - a.price;
-        // Default newest
-        return a.publishedSecondsAgo - b.publishedSecondsAgo;
+        // Default newest: sort strictly by rawId (highest ID = published most recently on Vinted)
+        return (b.rawId || 0) - (a.rawId || 0);
       });
   }, [
     listings,

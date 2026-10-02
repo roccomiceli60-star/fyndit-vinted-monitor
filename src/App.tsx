@@ -137,6 +137,16 @@ export default function App() {
 
           if (data.items.length > 0) {
             setListings((prev) => {
+              if (searchQ) {
+                // When actively searching, NEVER mix in items from previous queries
+                const prevMap = new Map(prev.map((p) => [p.id, p]));
+                return data.items.map((incoming: VintedListing) => {
+                  const existing = prevMap.get(incoming.id);
+                  if (!existing) return { ...incoming, isNewDrop: true };
+                  return existing.isNewDrop ? { ...incoming, isNewDrop: true } : incoming;
+                });
+              }
+
               if (prev.length === 0) return data.items;
 
               const prevMap = new Map(prev.map((p) => [p.id, p]));
@@ -198,6 +208,8 @@ export default function App() {
 
   // Execute Search query: queries live API first, falls back smoothly to client pool
   const executeSearch = useCallback(async (search: string, brand: string) => {
+    activeSearchRef.current = search;
+    activeBrandRef.current = brand;
     setActiveSearch(search);
     setActiveBrand(brand);
     setIsSearching(true);

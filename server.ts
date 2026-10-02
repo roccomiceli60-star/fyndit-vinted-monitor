@@ -315,19 +315,33 @@ export function expandSearchTerms(searchQuery: string): string[] {
   if (!q) return [''];
 
   const words = q.split(/\s+/).filter(Boolean);
-  const primaryWord = words[0];
-  const synonyms = IT_SYNONYMS[primaryWord] || [primaryWord];
+  const results: string[] = [q]; // ALWAYS put user's verbatim query first
 
-  if (words.length === 1) {
-    return synonyms.slice(0, 3);
+  // Look for any word in the query that has Italian marketplace synonyms
+  let matchIndex = -1;
+  let matchSynonyms: string[] = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (IT_SYNONYMS[w]) {
+      matchIndex = i;
+      matchSynonyms = IT_SYNONYMS[w];
+      break;
+    }
   }
 
-  const results: string[] = [];
-  const rest = words.slice(1).join(' ');
-  for (const s of synonyms.slice(0, 3)) {
-    results.push(`${s} ${rest}`.trim());
+  if (matchIndex !== -1 && matchSynonyms.length > 0) {
+    for (const syn of matchSynonyms) {
+      if (syn.toLowerCase() === words[matchIndex].toLowerCase()) continue;
+      const copyWords = [...words];
+      copyWords[matchIndex] = syn;
+      const variant = copyWords.join(' ').trim();
+      if (!results.includes(variant)) {
+        results.push(variant);
+      }
+    }
   }
-  if (!results.includes(q)) results.unshift(q);
+
   return results.slice(0, 3);
 }
 
