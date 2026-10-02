@@ -12,7 +12,18 @@ import { playAlertChime } from './services/vintedAutonomousEngine';
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
   const [listings, setListings] = useState<VintedListing[]>([]);
-  const [monitors, setMonitors] = useState<VintedMonitor[]>(INITIAL_MONITORS);
+  const [monitors, setMonitors] = useState<VintedMonitor[]>(() => {
+    try {
+      const saved = localStorage.getItem('fyndit_monitors');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_MONITORS;
+  });
   const [newDealsCount, setNewDealsCount] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number>(1);
@@ -33,9 +44,18 @@ export default function App() {
   const activeSearchRef = useRef<string>('');
   const activeBrandRef = useRef<string>('Tutti');
   const isSseConnectedRef = useRef<boolean>(false);
+  const isFetchingRef = useRef<boolean>(false);
   const monitorsRef = useRef<VintedMonitor[]>(monitors);
   const monitorsModeRef = useRef<boolean>(monitorsMode);
   const selectedMonitorFilterRef = useRef<string>(selectedMonitorFilter);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fyndit_monitors', JSON.stringify(monitors));
+    } catch {
+      // ignore
+    }
+  }, [monitors]);
 
   useEffect(() => {
     activeSearchRef.current = activeSearch;
@@ -172,6 +192,8 @@ export default function App() {
 
   // Active real-time drop poller for standalone iOS & live feed with continuous autorefresh
   const fetchLiveRealtimeDrops = useCallback(async (manual = false) => {
+    if (isFetchingRef.current && !manual) return;
+    isFetchingRef.current = true;
     if (manual) setIsRefreshing(true);
     try {
       const searchQ = activeSearchRef.current.trim();
@@ -339,6 +361,7 @@ export default function App() {
     } catch {
       // Silent retry on next interval - never inject fake random drops
     } finally {
+      isFetchingRef.current = false;
       if (manual) setTimeout(() => setIsRefreshing(false), 400);
     }
   }, []);
@@ -349,10 +372,10 @@ export default function App() {
     // Immediate fetch
     fetchLiveRealtimeDrops(false);
 
-    // Turbo Sniper: 100% Real-Time ultra-fast sub-second pulse interval (400ms)
+    // Turbo Sniper: 100% Real-Time smooth sub-second pulse interval (1200ms)
     const interval = setInterval(() => {
       fetchLiveRealtimeDrops(false);
-    }, 400);
+    }, 1200);
 
     return () => clearInterval(interval);
   }, [turboSniper, fetchLiveRealtimeDrops]);

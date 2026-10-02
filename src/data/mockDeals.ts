@@ -1456,4 +1456,17 @@ export const INITIAL_MONITORS: VintedMonitor[] = [
     createdAt: 1790800000000,
     matchCount: 47,
   },
+  {
+    id: 'mon-5',
+    name: 'Nintendo 3DS / 2DS & Giochi',
+    brands: ['Nintendo'],
+    keywords: ['3ds', '2ds'],
+    excludedKeywords: ['custodia sola', 'scatola vuota'],
+    sizes: [],
+    minPrice: 0,
+    maxPrice: 120,
+    isActive: true,
+    createdAt: 1790800000000,
+    matchCount: 94,
+  },
 ];

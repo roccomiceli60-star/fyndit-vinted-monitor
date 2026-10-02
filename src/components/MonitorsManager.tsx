@@ -394,6 +394,14 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={() => handleApplyTemplate('🎮 Nintendo 3DS / 2DS & Giochi', 'all', [], ['Nintendo'], '3ds, 2ds', 'custodia sola, scatola vuota', 120)}
+                    className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-red-500/50 text-left transition-all"
+                  >
+                    <div className="font-bold text-red-400">🎮 Nintendo 3DS / 2DS</div>
+                    <div className="text-[10px] text-zinc-500">Console & Giochi 3DS &lt;120€</div>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleApplyTemplate('🎮 Console PS5 & Switch', 'entertainment_electronics', ['Console & Videogiochi'], ['Sony', 'PlayStation', 'Nintendo'], 'ps5, switch, oled, console', 'scatola vuota, rotto', 180)}
                     className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-teal-500/50 text-left transition-all"
                   >

@@ -306,6 +306,11 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
           return true;
         }
 
+        // When in monitor-driven mode, items are already vetted by active monitors
+        if (monitorsMode) {
+          return true;
+        }
+
         // Freshness filter: only applies to general drop feed when not searching for specific keywords
         if (onlyRecentDrops && item.publishedSecondsAgo > 1200) return false;
 

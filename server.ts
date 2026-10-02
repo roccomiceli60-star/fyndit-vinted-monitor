@@ -583,6 +583,7 @@ async function runGeneralWorker(workerId = 1) {
 
 // Dynamic active client search queries (tracked with lastRequested timestamp)
 const activeClientSearchQueries = new Map<string, number>();
+const queryResultsCache = new Map<string, { items: VintedItem[]; timestamp: number }>();
 
 export function touchActiveSearch(q: string) {
   if (!q || !q.trim()) return;
@@ -691,29 +692,36 @@ app.get('/api/vinted/live', async (req, res) => {
     touchActiveSearch(effectiveQuery);
   }
 
-  try {
-    const rawItems = await fetchFromVinted(effectiveQuery);
-    const transformed = rawItems.map((it: any) => (it.id && it.dealScore ? it : transformVintedItem(it)));
-    for (const it of transformed) {
-      if (!seenItemIds.has(it.id)) {
-        seenItemIds.add(it.id);
-        realItemsCache.unshift(it);
+  const cached = queryResultsCache.get(effectiveQuery);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < 1500) {
+    results = cached.items;
+  } else {
+    try {
+      const rawItems = await fetchFromVinted(effectiveQuery);
+      const transformed = rawItems.map((it: any) => (it.id && it.dealScore ? it : transformVintedItem(it)));
+      for (const it of transformed) {
+        if (!seenItemIds.has(it.id)) {
+          seenItemIds.add(it.id);
+          realItemsCache.unshift(it);
+        }
       }
-    }
-    // Strictly return the freshly fetched items from Vinted
-    results = transformed;
-  } catch (err) {
-    console.error('Fetch live error:', err);
-    // Offline / fallback to newest items in cache matching query
-    const now = Date.now();
-    if (effectiveQuery) {
-      const searchWords = effectiveQuery.toLowerCase().split(/\s+/).filter(Boolean);
-      results = realItemsCache.filter((item) => {
-        const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
-        return searchWords.every((w) => itemText.includes(w));
-      });
-    } else {
-      results = realItemsCache.filter((i) => now - i.discoveredAt < 20 * 60 * 1000);
+      results = transformed;
+      queryResultsCache.set(effectiveQuery, { items: transformed, timestamp: Date.now() });
+    } catch (err) {
+      console.error('Fetch live error:', err);
+      // Offline / fallback to newest items in cache matching query
+      if (cached && cached.items.length > 0) {
+        results = cached.items;
+      } else if (effectiveQuery) {
+        const searchWords = effectiveQuery.toLowerCase().split(/\s+/).filter(Boolean);
+        results = realItemsCache.filter((item) => {
+          const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
+          return searchWords.every((w) => itemText.includes(w));
+        });
+      } else {
+        results = realItemsCache.filter((i) => now - i.discoveredAt < 20 * 60 * 1000);
+      }
     }
   }
 
