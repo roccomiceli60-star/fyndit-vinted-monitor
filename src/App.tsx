@@ -68,11 +68,26 @@ export default function App() {
       eligibleItems = [];
       for (const it of newItems) {
         for (const mon of activeMons) {
-          const q = [...(mon.brands || []), ...(mon.keywords || [])].join(' ').toLowerCase();
+          const monWords = [
+            ...(mon.brands || []),
+            ...(mon.keywords || []),
+            ...(mon.name ? [mon.name] : [])
+          ].map((w) => w.trim().toLowerCase()).filter(Boolean);
+
           const itText = `${it.title} ${it.brand} ${it.category}`.toLowerCase();
-          const matchPrice = (!mon.maxPrice || it.price <= mon.maxPrice) && (!mon.minPrice || it.price >= mon.minPrice);
-          const matchWord = q ? q.split(/\s+/).some((w) => itText.includes(w)) : true;
-          if (matchPrice && matchWord) {
+          const matchPrice = (!mon.maxPrice || mon.maxPrice <= 0 || it.price <= mon.maxPrice) &&
+                             (!mon.minPrice || mon.minPrice <= 0 || it.price >= mon.minPrice);
+
+          const matchWord = monWords.length > 0
+            ? monWords.some((w) => itText.includes(w))
+            : true;
+
+          let matchCat = true;
+          if (mon.category && mon.category !== 'all' && !mon.category.toLowerCase().includes('tutte')) {
+            matchCat = itText.includes(mon.category.toLowerCase());
+          }
+
+          if (matchPrice && matchWord && matchCat) {
             eligibleItems.push({ ...it, matchedMonitorName: mon.name });
             break;
           }
@@ -178,23 +193,55 @@ export default function App() {
 
         const fetchPromises = targetMons.map(async (m) => {
           try {
-            const query = [...(m.brands || []), ...(m.keywords || [])].join(' ').trim();
-            if (!query) return [];
-            const monUrl = new URL('/api/vinted/live', window.location.origin);
-            monUrl.searchParams.set('search', query);
-            if (m.maxPrice && m.maxPrice > 0) monUrl.searchParams.set('max_price', String(m.maxPrice));
-            if (m.minPrice && m.minPrice > 0) monUrl.searchParams.set('min_price', String(m.minPrice));
+            // Intelligent query builder:
+            // 1. If keywords are present, query each keyword (or brand + keyword)
+            // 2. If only brands, query the brand
+            // 3. If neither, query the monitor name!
+            const termsToQuery: string[] = [];
+            const primaryBrand = (m.brands && m.brands.length > 0) ? m.brands[0].trim() : '';
 
-            const r = await fetch(monUrl.toString(), {
-              headers: { 'Cache-Control': 'no-cache' },
-              signal: AbortSignal.timeout(4000),
+            if (m.keywords && m.keywords.length > 0) {
+              for (const kw of m.keywords.slice(0, 3)) {
+                const cleanKw = kw.trim();
+                if (!cleanKw) continue;
+                if (primaryBrand && !cleanKw.toLowerCase().includes(primaryBrand.toLowerCase())) {
+                  termsToQuery.push(`${primaryBrand} ${cleanKw}`);
+                } else {
+                  termsToQuery.push(cleanKw);
+                }
+              }
+            } else if (primaryBrand) {
+              termsToQuery.push(primaryBrand);
+            } else if (m.name.trim()) {
+              termsToQuery.push(m.name.trim());
+            }
+
+            if (termsToQuery.length === 0) return [];
+
+            const subPromises = termsToQuery.map(async (term) => {
+              try {
+                const monUrl = new URL('/api/vinted/live', window.location.origin);
+                monUrl.searchParams.set('search', term);
+                if (m.maxPrice && m.maxPrice > 0) monUrl.searchParams.set('max_price', String(m.maxPrice));
+                if (m.minPrice && m.minPrice > 0) monUrl.searchParams.set('min_price', String(m.minPrice));
+
+                const r = await fetch(monUrl.toString(), {
+                  headers: { 'Cache-Control': 'no-cache' },
+                  signal: AbortSignal.timeout(4000),
+                });
+                if (!r.ok) return [];
+                const j = await r.json();
+                return (j.items || []).map((it: VintedListing) => ({
+                  ...it,
+                  matchedMonitorName: m.name,
+                }));
+              } catch {
+                return [];
+              }
             });
-            if (!r.ok) return [];
-            const j = await r.json();
-            return (j.items || []).map((it: VintedListing) => ({
-              ...it,
-              matchedMonitorName: m.name,
-            }));
+
+            const termResults = await Promise.all(subPromises);
+            return termResults.flat();
           } catch {
             return [];
           }

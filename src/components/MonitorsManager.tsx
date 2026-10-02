@@ -37,7 +37,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
 
   // New Monitor form state
   const [name, setName] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('entertainment_electronics');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [customBrandInput, setCustomBrandInput] = useState('');
@@ -53,6 +53,9 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
   // Icon mapping
   const getCategoryIcon = (catName?: string) => {
     const c = (catName || '').toLowerCase();
+    if (c.includes('tutte') || c.includes('all')) {
+      return <Layers className="w-4 h-4 text-teal-400" />;
+    }
     if (c.includes('elettronica') || c.includes('entertainment') || c.includes('game') || c.includes('pokemon')) {
       return <Gamepad2 className="w-4 h-4 text-purple-400" />;
     }
@@ -72,7 +75,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
   };
 
   // Find active category definition
-  const currentCategoryDef = VINTED_CATEGORIES.find((c) => c.id === selectedCategory) || VINTED_CATEGORIES[1];
+  const currentCategoryDef = VINTED_CATEGORIES.find((c) => c.id === selectedCategory) || VINTED_CATEGORIES[0];
 
   const handleSubcategoryToggle = (subName: string) => {
     if (selectedSubcategories.includes(subName)) {
@@ -129,12 +132,18 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
       .map((k) => k.trim())
       .filter(Boolean);
 
+    // If keywords is empty and no brands chosen, automatically use monitor name as keyword
+    let finalKeywords = kwArray;
+    if (finalKeywords.length === 0 && selectedBrands.length === 0 && name.trim()) {
+      finalKeywords = [name.trim()];
+    }
+
     onAddMonitor({
       name: name.trim(),
-      category: currentCategoryDef.name,
-      subcategories: selectedSubcategories,
+      category: selectedCategory === 'all' ? 'Tutte le Categorie' : currentCategoryDef.name,
+      subcategories: selectedCategory === 'all' ? [] : selectedSubcategories,
       brands: selectedBrands,
-      keywords: kwArray,
+      keywords: finalKeywords,
       excludedKeywords: exKwArray,
       sizes: selectedSizes,
       maxPrice: Number(maxPrice),
@@ -443,9 +452,14 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
 
               {/* Step 1: Scegli la Categoria Ufficiale Vinted */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
-                  1. Seleziona la Categoria di Vinted *
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
+                    1. Categoria Vinted
+                  </label>
+                  <span className="text-[11px] text-[#09B1BA] font-semibold">
+                    {selectedCategory === 'all' ? '✨ Tutte le Categorie (Consigliato)' : currentCategoryDef.name}
+                  </span>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                   {VINTED_CATEGORIES.map((cat) => (
                     <button
@@ -457,13 +471,18 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                       }}
                       className={`p-3 rounded-xl border text-left transition-all flex flex-col gap-1 ${
                         selectedCategory === cat.id
-                          ? 'bg-teal-500/10 border-teal-400 text-white shadow-md'
+                          ? 'bg-[#09B1BA]/20 border-[#09B1BA] text-white shadow-md'
                           : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
                       }`}
                     >
                       <div className="font-bold text-xs flex items-center gap-1.5">
                         {getCategoryIcon(cat.name)}
-                        <span>{cat.name}</span>
+                        <span className="truncate">{cat.name}</span>
+                        {cat.id === 'all' && (
+                          <span className="ml-auto text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-[#09B1BA] text-zinc-950">
+                            Tutto
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10px] text-zinc-500 line-clamp-1">
                         {cat.description}
@@ -471,6 +490,14 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                     </button>
                   ))}
                 </div>
+                {selectedCategory === 'all' && (
+                  <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-xs flex items-center gap-2">
+                    <Target className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>
+                      <strong>Monitor Globale:</strong> Questo monitor cercherà articoli in <strong>TUTTE</strong> le categorie di Vinted (Sneakers, Abbigliamento, Console, Borse, Carte, Giochi, ecc.) senza limitazioni!
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Step 2: Sottocategorie pertinenti */}
