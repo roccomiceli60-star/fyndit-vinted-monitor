@@ -71,8 +71,8 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
             fetchLiveVintedWithSession(search: search, brand: brand) { liveItems in
                 var finalItems = liveItems
 
-                // Fallback to bundled catalog only if completely offline
-                if finalItems.isEmpty {
+                // Fallback to bundled catalog only if completely offline and not an explicit search
+                if finalItems.isEmpty && search.isEmpty && (brand.isEmpty || brand.lowercased() == "tutti") {
                     finalItems = self.filterBundledCatalog(search: search, brand: brand, bundleUrl: bundleUrl, wwwDir: wwwDir)
                 }
 
@@ -230,9 +230,9 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                 query = query.isEmpty ? brand : "\(brand) \(query)"
             }
 
-            var urlString = "https://api.vinted.it/svc-catalogue/items?page=1&per_page=30&order=newest_first"
+            var urlString = "https://api.vinted.it/svc-catalogue/items?order=newest_first"
             if !query.isEmpty, let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-                urlString += "&search_text=\(encoded)"
+                urlString = "https://api.vinted.it/svc-catalogue/items?search_text=\(encoded)&order=newest_first"
             }
 
             guard let targetUrl = URL(string: urlString) else {
@@ -414,7 +414,7 @@ class AppSchemeHandler: NSObject, WKURLSchemeHandler {
             return matchSearch && matchBrand
         }
 
-        return (filtered.isEmpty ? list : filtered).enumerated().map { (idx, item) in
+        return filtered.enumerated().map { (idx, item) in
             var mutable = item
             mutable["publishedSecondsAgo"] = idx * 3 + 2
             return mutable

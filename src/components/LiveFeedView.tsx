@@ -273,10 +273,11 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
         // Freshness filter: only applies to general drop feed when not searching for specific keywords
         if (onlyRecentDrops && !isActivelySearching && item.publishedSecondsAgo > 1200) return false;
 
-        // Search text filter: checks tokens across title, brand, category, condition, size
-        if (isActivelySearching && searchWords.length > 0) {
+        // Client-side text filter: only applies while typing before server search completes
+        const isLocallyTyping = isActivelySearching && searchInput.trim().toLowerCase() !== currentSearch.trim().toLowerCase();
+        if (isLocallyTyping && searchWords.length > 0) {
           const fullText = `${item.title} ${item.brand} ${item.category} ${item.size} ${item.condition}`.toLowerCase();
-          const matches = searchWords.every((w) => fullText.includes(w));
+          const matches = searchWords.some((w) => fullText.includes(w));
           if (!matches) return false;
         }
 

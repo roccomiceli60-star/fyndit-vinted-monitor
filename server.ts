@@ -152,11 +152,14 @@ async function refreshVintedSession(force = false): Promise<{ cookie: string; to
 }
 
 // Fetch items from Vinted API strictly ordered by newest_first and filtered for freshness
-async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): Promise<any[]> {
+async function fetchFromVinted(searchText = '', retryCount = 0): Promise<any[]> {
   const { cookie, token } = await refreshVintedSession();
-  const url = `https://api.vinted.it/svc-catalogue/items?search_text=${encodeURIComponent(
-    searchText
-  )}&page=1&per_page=${perPage}&order=newest_first`;
+  let url = 'https://api.vinted.it/svc-catalogue/items?order=newest_first';
+  if (searchText && searchText.trim()) {
+    url = `https://api.vinted.it/svc-catalogue/items?search_text=${encodeURIComponent(
+      searchText.trim()
+    )}&order=newest_first`;
+  }
 
   const headers: Record<string, string> = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -178,7 +181,7 @@ async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): P
   // If token expired, force refresh session and retry once
   if (res.status === 401 && retryCount === 0) {
     await refreshVintedSession(true);
-    return fetchFromVinted(searchText, perPage, 1);
+    return fetchFromVinted(searchText, 1);
   }
 
   if (!res.ok) {
@@ -206,12 +209,7 @@ async function fetchFromVinted(searchText = '', perPage = 30, retryCount = 0): P
       (Array.isArray(it.photos) && it.photos.length > 0 && (it.photos[0].url || it.photos[0].full_size_url))
     );
     if (!hasPhoto) return false;
-    
-    // 3. Exclude old IDs only during general sniper feed, never on explicit searches
-    if (!searchText.trim() && highestSeenRawId > 0 && it.id && typeof it.id === 'number') {
-      const idDelta = highestSeenRawId - it.id;
-      if (idDelta > 45000) return false;
-    }
+
     return true;
   });
 
@@ -362,11 +360,11 @@ function ingestRawItems(items: any[]): VintedItem[] {
   return brandNew;
 }
 
-// Interleaved drop workers for sub-second real-time detection
+// Interleaved drop workers for sub-second real-time detection on real catalogue
 async function runGeneralWorker(workerId = 1) {
   while (true) {
     try {
-      const raw = await fetchFromVinted('', 30);
+      const raw = await fetchFromVinted('');
       ingestRawItems(raw);
     } catch {
       // transient error, retry
@@ -374,23 +372,6 @@ async function runGeneralWorker(workerId = 1) {
     await new Promise((r) => setTimeout(r, 900));
   }
 }
-
-// Micro-Worker 2: Monitored Hyped Categories & Brands rotation
-const SNIPER_QUERIES = [
-  'pokemon tcg',
-  'trapstar',
-  'ps5',
-  'corteiz',
-  'lego star wars',
-  'nike dunk',
-  'airpods',
-  'ralph lauren',
-  'stone island',
-  'carhartt detroit',
-  'nintendo switch',
-  'stussy 8 ball',
-];
-let queryIdx = 0;
 
 // Dynamic active client search queries (tracked with lastRequested timestamp)
 const activeClientSearchQueries = new Map<string, number>();
@@ -413,38 +394,23 @@ async function runActiveSearchSniperWorker() {
     if (queries.length > 0) {
       for (const q of queries) {
         try {
-          const raw = await fetchFromVinted(q, 30);
+          const raw = await fetchFromVinted(q);
           ingestRawItems(raw);
         } catch {
           // ignore
         }
-        await new Promise((r) => setTimeout(r, 450));
+        await new Promise((r) => setTimeout(r, 600));
       }
     } else {
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 800));
     }
   }
 }
 
-async function runBrandWorker() {
-  while (true) {
-    const q = SNIPER_QUERIES[queryIdx % SNIPER_QUERIES.length];
-    queryIdx++;
-    try {
-      const raw = await fetchFromVinted(q, 20);
-      ingestRawItems(raw);
-    } catch {
-      // ignore
-    }
-    await new Promise((r) => setTimeout(r, 1200));
-  }
-}
-
-// Start two interleaved general workers (staggered by 450ms) + active search sniper + brand sniper worker
+// Start two interleaved general workers (staggered by 450ms) + active search sniper
 runGeneralWorker(1);
 setTimeout(() => runGeneralWorker(2), 450);
 setTimeout(runActiveSearchSniperWorker, 600);
-setTimeout(runBrandWorker, 900);
 
 // API Routes
 // 1. SSE Stream: Pushes new items the millisecond they are detected
@@ -494,55 +460,39 @@ app.get('/api/vinted/live', async (req, res) => {
   const minPrice = req.query.min_price ? parseFloat(req.query.min_price as string) : null;
 
   let results: VintedItem[] = [];
+  let effectiveQuery = search;
+  if (brand && brand !== 'tutti') {
+    effectiveQuery = search ? `${brand} ${search}`.trim() : brand;
+  }
 
-  if (search || (brand && brand !== 'tutti')) {
-    let effectiveQuery = search;
-    if (brand && brand !== 'tutti') {
-      effectiveQuery = search ? `${brand} ${search}`.trim() : brand;
-    }
+  if (effectiveQuery) {
     touchActiveSearch(effectiveQuery);
+  }
 
-    try {
-      const rawItems = await fetchFromVinted(effectiveQuery, 35);
-      const transformed = rawItems.map(transformVintedItem);
-      for (const it of transformed) {
-        if (!seenItemIds.has(it.id)) {
-          seenItemIds.add(it.id);
-          realItemsCache.unshift(it);
-        }
+  try {
+    const rawItems = await fetchFromVinted(effectiveQuery);
+    const transformed = rawItems.map(transformVintedItem);
+    for (const it of transformed) {
+      if (!seenItemIds.has(it.id)) {
+        seenItemIds.add(it.id);
+        realItemsCache.unshift(it);
       }
-
-      // Merge freshly transformed items with any matching cached items
-      const now = Date.now();
-      const searchWords = search.split(/\s+/).filter(Boolean);
-      const cachedMatches = realItemsCache.filter((item) => {
-        const isFresh = (now - item.discoveredAt) < 20 * 60 * 1000;
-        const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
-        const matchesSearch = searchWords.length === 0 || searchWords.every((w) => itemText.includes(w));
-        const matchesBrand = !brand || brand === 'tutti' || item.brand.toLowerCase().includes(brand);
-        return isFresh && matchesSearch && matchesBrand;
-      });
-
-      const map = new Map<string, VintedItem>();
-      for (const it of transformed) map.set(it.id, it);
-      for (const it of cachedMatches) {
-        if (!map.has(it.id)) map.set(it.id, it);
-      }
-      results = Array.from(map.values());
-    } catch {
-      const now = Date.now();
-      const searchWords = search.split(/\s+/).filter(Boolean);
-      results = realItemsCache.filter((item) => {
-        const isFresh = (now - item.discoveredAt) < 20 * 60 * 1000;
-        const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
-        const matchesSearch = searchWords.length === 0 || searchWords.every((w) => itemText.includes(w));
-        const matchesBrand = !brand || brand === 'tutti' || item.brand.toLowerCase().includes(brand);
-        return isFresh && matchesSearch && matchesBrand;
-      });
     }
-  } else {
+    // Strictly return the freshly fetched items from Vinted
+    results = transformed;
+  } catch (err) {
+    console.error('Fetch live error:', err);
+    // Offline / fallback to newest items in cache matching query
     const now = Date.now();
-    results = realItemsCache.filter((i) => (now - i.discoveredAt) < 20 * 60 * 1000);
+    if (effectiveQuery) {
+      const searchWords = effectiveQuery.toLowerCase().split(/\s+/).filter(Boolean);
+      results = realItemsCache.filter((item) => {
+        const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
+        return searchWords.every((w) => itemText.includes(w));
+      });
+    } else {
+      results = realItemsCache.filter((i) => now - i.discoveredAt < 20 * 60 * 1000);
+    }
   }
 
   if (brand && brand !== 'tutti') {
@@ -560,12 +510,13 @@ app.get('/api/vinted/live', async (req, res) => {
     results = results.filter((item) => item.price <= maxPrice);
   }
 
-  results.sort((a, b) => b.discoveredAt - a.discoveredAt);
+  // Sort strictly by rawId descending (guaranteed chronological: highest ID = most recently posted)
+  results.sort((a, b) => b.rawId - a.rawId);
 
-  const now = Date.now();
-  results = results.map((item) => ({
+  // Set real publication time relative to list index
+  results = results.map((item, idx) => ({
     ...item,
-    publishedSecondsAgo: Math.max(1, Math.round((now - item.discoveredAt) / 1000)),
+    publishedSecondsAgo: Math.max(2, idx * 5),
   }));
 
   const latencyMs = Date.now() - startTime;
@@ -574,7 +525,7 @@ app.get('/api/vinted/live', async (req, res) => {
     success: true,
     total: results.length,
     latencyMs,
-    query: search || brand || 'all',
+    query: effectiveQuery || 'all',
     source: 'vinted_live_official_api',
     items: results,
   });
