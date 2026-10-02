@@ -47,8 +47,8 @@ interface LiveFeedViewProps {
   onFilterChange: (search: string, brand: string) => void;
   currentSearch?: string;
   currentBrand?: string;
-  autoRefreshEnabled?: boolean;
-  onToggleAutoRefresh?: () => void;
+  turboSniperActive?: boolean;
+  onToggleTurboSniper?: () => void;
   onManualRefresh?: () => void;
   isRefreshing?: boolean;
 }
@@ -59,8 +59,8 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   onFilterChange,
   currentSearch = '',
   currentBrand = 'Tutti',
-  autoRefreshEnabled = true,
-  onToggleAutoRefresh,
+  turboSniperActive = true,
+  onToggleTurboSniper,
   onManualRefresh,
   isRefreshing = false,
 }) => {
@@ -995,21 +995,21 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             <span>Nuovi drop (&lt; 20 min)</span>
           </button>
 
-          {/* 11. Auto-Refresh in Tempo Reale Control */}
+          {/* 11. Turbo Sniper in Tempo Reale Control */}
           <div className="flex items-center gap-1.5 ml-auto">
-            {onToggleAutoRefresh && (
+            {onToggleTurboSniper && (
               <button
                 type="button"
-                onClick={onToggleAutoRefresh}
+                onClick={onToggleTurboSniper}
                 className={`px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-all text-xs font-bold ${
-                  autoRefreshEnabled
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-500/10'
+                  turboSniperActive
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 shadow-md shadow-amber-500/20'
                     : 'bg-zinc-950 text-zinc-400 border-zinc-700 hover:border-zinc-500'
                 }`}
-                title="Attiva/Disattiva aggiornamento in tempo reale automatico"
+                title="Turbo Sniper: monitoraggio e drop in tempo reale"
               >
-                <span className={`w-2 h-2 rounded-full ${autoRefreshEnabled ? 'bg-emerald-400 animate-ping' : 'bg-zinc-600'}`} />
-                <span>Auto-Refresh {autoRefreshEnabled ? 'ON' : 'OFF'}</span>
+                <span className={`w-2 h-2 rounded-full ${turboSniperActive ? 'bg-amber-400 animate-ping' : 'bg-zinc-600'}`} />
+                <span>⚡ Turbo Sniper: {turboSniperActive ? 'LIVE' : 'PAUSA'}</span>
               </button>
             )}
 
