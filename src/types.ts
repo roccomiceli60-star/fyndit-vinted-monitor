@@ -38,6 +38,7 @@ export interface VintedListing {
   discoveredAt?: number;
   potentialProfit?: number;
   resellNotes?: string;
+  matchedMonitorName?: string;
 }
 
 export interface VintedMonitor {

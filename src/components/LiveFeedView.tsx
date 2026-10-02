@@ -28,9 +28,11 @@ import {
   ArrowUpDown,
   LayoutGrid,
   Rows,
-  RefreshCw
+  RefreshCw,
+  Target,
+  Plus
 } from 'lucide-react';
-import { VintedListing } from '../types';
+import { VintedListing, VintedMonitor } from '../types';
 import { 
   POPULAR_BRANDS, 
   CLOTHING_SIZES, 
@@ -51,6 +53,12 @@ interface LiveFeedViewProps {
   onToggleTurboSniper?: () => void;
   onManualRefresh?: () => void;
   isRefreshing?: boolean;
+  monitors?: VintedMonitor[];
+  monitorsMode?: boolean;
+  onToggleMonitorsMode?: () => void;
+  selectedMonitorFilter?: string;
+  onSelectMonitorFilter?: (id: string) => void;
+  onGoToMonitorsTab?: () => void;
 }
 
 export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
@@ -63,6 +71,12 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   onToggleTurboSniper,
   onManualRefresh,
   isRefreshing = false,
+  monitors = [],
+  monitorsMode = true,
+  onToggleMonitorsMode,
+  selectedMonitorFilter = 'all',
+  onSelectMonitorFilter,
+  onGoToMonitorsTab,
 }) => {
   // Grid layout mode: '2' = 2 per row on iPhone/mobile, '1' = 1 per row
   const [gridColumns, setGridColumns] = useState<'1' | '2'>('2');
@@ -253,6 +267,9 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
     }
   };
 
+  // Active monitors
+  const activeMonitors = useMemo(() => monitors.filter((m) => m.isActive), [monitors]);
+
   // Filtered brands for brand dropdown search
   const filteredBrandList = useMemo(() => {
     if (!brandSearchQuery.trim()) return POPULAR_BRANDS;
@@ -266,6 +283,14 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
 
     return listings
       .filter((item) => {
+        // If in monitor filter mode and a specific monitor is selected:
+        if (monitorsMode && !isActivelySearching && selectedMonitorFilter !== 'all') {
+          const targetMon = monitors.find((m) => m.id === selectedMonitorFilter);
+          if (targetMon && item.matchedMonitorName !== targetMon.name) {
+            return false;
+          }
+        }
+
         // Under 50€ price filter
         if (underFifty && item.price > 50) return false;
 
@@ -370,6 +395,9 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
     minPrice,
     maxPrice,
     sortBy,
+    monitorsMode,
+    selectedMonitorFilter,
+    monitors,
   ]);
 
   // Compute active filters count
@@ -1199,6 +1227,99 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
         )}
       </div>
 
+      {/* 🎯 MONITOR-DRIVEN LIVE DEALS CONTROL BANNER */}
+      {monitorsMode && !searchInput.trim() && (
+        <div className="bg-gradient-to-r from-zinc-900 via-zinc-900 to-cyan-950/40 border border-cyan-500/30 rounded-2xl p-4 shadow-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0">
+                <Target className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold text-white">
+                    Live Deals: Filtrato per i tuoi Monitor ({activeMonitors.length} attivi)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold border border-emerald-500/30">
+                    SNIPER ATTIVO
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Carica e monitora in tempo reale solo gli articoli definiti nei tuoi monitor, senza annunci casuali.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {onToggleMonitorsMode && (
+                <button
+                  type="button"
+                  onClick={onToggleMonitorsMode}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-colors"
+                  title="Mostra tutti gli annunci generali di Vinted"
+                >
+                  🌐 Tutto Vinted
+                </button>
+              )}
+              {onGoToMonitorsTab && (
+                <button
+                  type="button"
+                  onClick={onGoToMonitorsTab}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#09B1BA] hover:bg-[#079aa2] text-zinc-950 transition-colors flex items-center gap-1.5 shadow-md shadow-[#09B1BA]/20"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>Nuovo Monitor</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Active Monitor Chips to filter feed */}
+          {activeMonitors.length > 0 ? (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => onSelectMonitorFilter?.('all')}
+                className={`px-3 py-1 rounded-full text-[11px] font-bold shrink-0 transition-all ${
+                  selectedMonitorFilter === 'all'
+                    ? 'bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/20'
+                    : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
+                }`}
+              >
+                🎯 Tutti i Monitor ({activeMonitors.length})
+              </button>
+              {activeMonitors.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => onSelectMonitorFilter?.(m.id)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-all flex items-center gap-1.5 ${
+                    selectedMonitorFilter === m.id
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/60 shadow-md'
+                      : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
+                  }`}
+                >
+                  <span>⚡ {m.name}</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">(&lt;€{m.maxPrice})</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between">
+              <span>Nessun monitor attivo: attiva o aggiungi un monitor nella sezione Monitor per vedere i tuoi drop personalizzati.</span>
+              {onGoToMonitorsTab && (
+                <button
+                  onClick={onGoToMonitorsTab}
+                  className="px-3 py-1 rounded bg-amber-500 text-zinc-950 font-bold shrink-0 ml-2"
+                >
+                  Attiva Monitor
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Empty State */}
       {displayedListings.length === 0 && (
         <div className="p-12 text-center rounded-2xl bg-zinc-900/50 border border-zinc-800 space-y-4">
@@ -1207,18 +1328,31 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
           </div>
           <div className="space-y-1">
             <h3 className="text-base font-bold text-zinc-200">
-              Nessun articolo trovato con questi criteri
+              {monitorsMode && activeMonitors.length === 0
+                ? 'Nessun monitor attivo'
+                : 'Nessun articolo trovato con questi criteri'}
             </h3>
             <p className="text-xs text-zinc-400 max-w-md mx-auto">
-              Gli annunci su Vinted vengono inseriti ogni secondo. Prova a cercare parole chiave più ampie o ad azzerare i filtri di prezzo e taglia.
+              {monitorsMode && activeMonitors.length === 0
+                ? 'Attiva almeno un monitor per iniziare lo streaming istantaneo dei tuoi articoli preferiti.'
+                : 'Gli annunci su Vinted vengono inseriti ogni secondo. Prova a cercare parole chiave più ampie o ad azzerare i filtri di prezzo e taglia.'}
             </p>
           </div>
-          <button
-            onClick={handleClearAll}
-            className="px-5 py-2.5 rounded-full bg-[#09B1BA] text-zinc-950 font-bold text-xs hover:bg-[#079aa2] transition-colors"
-          >
-            Azzera Filtri e Mostra Tutti
-          </button>
+          {monitorsMode && activeMonitors.length === 0 && onGoToMonitorsTab ? (
+            <button
+              onClick={onGoToMonitorsTab}
+              className="px-5 py-2.5 rounded-full bg-[#09B1BA] text-zinc-950 font-bold text-xs hover:bg-[#079aa2] transition-colors"
+            >
+              Configura Monitor Attivi
+            </button>
+          ) : (
+            <button
+              onClick={handleClearAll}
+              className="px-5 py-2.5 rounded-full bg-[#09B1BA] text-zinc-950 font-bold text-xs hover:bg-[#079aa2] transition-colors"
+            >
+              Azzera Filtri e Mostra Tutti
+            </button>
+          )}
         </div>
       )}
 
@@ -1263,10 +1397,16 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 decoding="async"
               />
               {/* Status Badges */}
-              <div className="absolute top-1.5 left-1.5 flex items-center gap-1 flex-wrap">
+              <div className="absolute top-1.5 left-1.5 flex items-center gap-1 flex-wrap max-w-[85%]">
                 {item.isNewDrop && (
                   <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-zinc-950 text-[8px] sm:text-[9px] font-black uppercase tracking-wider animate-pulse flex items-center gap-0.5 shadow-md">
                     <Zap className="w-2.5 h-2.5 fill-zinc-950" /> DROP
+                  </span>
+                )}
+                {item.matchedMonitorName && (
+                  <span className="px-1.5 py-0.5 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 text-[8px] sm:text-[9px] font-black uppercase tracking-wider flex items-center gap-0.5 shadow-md truncate max-w-[130px]">
+                    <Target className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+                    <span className="truncate">{item.matchedMonitorName}</span>
                   </span>
                 )}
               </div>

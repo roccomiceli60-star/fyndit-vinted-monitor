@@ -25,23 +25,66 @@ export default function App() {
   const [turboSniper, setTurboSniper] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
+  // Monitor-driven Live Deals mode (defaults to TRUE: only load what is monitored!)
+  const [monitorsMode, setMonitorsMode] = useState<boolean>(true);
+  const [selectedMonitorFilter, setSelectedMonitorFilter] = useState<string>('all');
+
   const seenIdsRef = useRef<Set<string>>(new Set());
   const activeSearchRef = useRef<string>('');
   const activeBrandRef = useRef<string>('Tutti');
   const isSseConnectedRef = useRef<boolean>(false);
+  const monitorsRef = useRef<VintedMonitor[]>(monitors);
+  const monitorsModeRef = useRef<boolean>(monitorsMode);
+  const selectedMonitorFilterRef = useRef<string>(selectedMonitorFilter);
 
   useEffect(() => {
     activeSearchRef.current = activeSearch;
     activeBrandRef.current = activeBrand;
   }, [activeSearch, activeBrand]);
 
+  useEffect(() => {
+    monitorsRef.current = monitors;
+  }, [monitors]);
+
+  useEffect(() => {
+    monitorsModeRef.current = monitorsMode;
+  }, [monitorsMode]);
+
+  useEffect(() => {
+    selectedMonitorFilterRef.current = selectedMonitorFilter;
+  }, [selectedMonitorFilter]);
+
   // Handle incoming drops from SSE or autonomous engine
   const handleIncomingDrops = useCallback((newItems: VintedListing[]) => {
     if (!newItems || newItems.length === 0) return;
 
+    const isMonMode = monitorsModeRef.current;
+    const searchQ = activeSearchRef.current.trim();
+    let eligibleItems = newItems;
+
+    // In Monitor-Driven mode without free search, strictly accept items matching active monitors
+    if (!searchQ && isMonMode) {
+      const activeMons = monitorsRef.current.filter((m) => m.isActive);
+      eligibleItems = [];
+      for (const it of newItems) {
+        for (const mon of activeMons) {
+          const q = [...(mon.brands || []), ...(mon.keywords || [])].join(' ').toLowerCase();
+          const itText = `${it.title} ${it.brand} ${it.category}`.toLowerCase();
+          const matchPrice = (!mon.maxPrice || it.price <= mon.maxPrice) && (!mon.minPrice || it.price >= mon.minPrice);
+          const matchWord = q ? q.split(/\s+/).some((w) => itText.includes(w)) : true;
+          if (matchPrice && matchWord) {
+            eligibleItems.push({ ...it, matchedMonitorName: mon.name });
+            break;
+          }
+        }
+      }
+    }
+
+    if (eligibleItems.length === 0) return;
+
     setListings((prev) => {
       const prevIds = new Set(prev.map((i) => i.id));
-      const brandNew = newItems
+      const brandNew = eligibleItems
         .filter((i) => !prevIds.has(i.id))
         .map((i) => ({ ...i, isNewDrop: true }));
 
@@ -116,9 +159,83 @@ export default function App() {
   const fetchLiveRealtimeDrops = useCallback(async (manual = false) => {
     if (manual) setIsRefreshing(true);
     try {
-      const url = new URL('/api/vinted/live', window.location.origin);
       const searchQ = activeSearchRef.current.trim();
       const brandQ = activeBrandRef.current;
+      const isMonMode = monitorsModeRef.current;
+
+      // 1. MONITOR-DRIVEN MODE:
+      // If user hasn't typed an ad-hoc search, stream strictly from active monitors!
+      if (!searchQ && isMonMode) {
+        const activeMons = monitorsRef.current.filter((m) => m.isActive);
+        if (activeMons.length === 0) {
+          setListings([]);
+          return;
+        }
+
+        const targetMons = selectedMonitorFilterRef.current === 'all'
+          ? activeMons
+          : activeMons.filter((m) => m.id === selectedMonitorFilterRef.current);
+
+        const fetchPromises = targetMons.map(async (m) => {
+          try {
+            const query = [...(m.brands || []), ...(m.keywords || [])].join(' ').trim();
+            if (!query) return [];
+            const monUrl = new URL('/api/vinted/live', window.location.origin);
+            monUrl.searchParams.set('search', query);
+            if (m.maxPrice && m.maxPrice > 0) monUrl.searchParams.set('max_price', String(m.maxPrice));
+            if (m.minPrice && m.minPrice > 0) monUrl.searchParams.set('min_price', String(m.minPrice));
+
+            const r = await fetch(monUrl.toString(), {
+              headers: { 'Cache-Control': 'no-cache' },
+              signal: AbortSignal.timeout(4000),
+            });
+            if (!r.ok) return [];
+            const j = await r.json();
+            return (j.items || []).map((it: VintedListing) => ({
+              ...it,
+              matchedMonitorName: m.name,
+            }));
+          } catch {
+            return [];
+          }
+        });
+
+        const nestedResults = await Promise.all(fetchPromises);
+        const combined = nestedResults.flat();
+
+        // Deduplicate and sort strictly newest first
+        const uniqueMap = new Map<string, VintedListing>();
+        for (const item of combined) {
+          if (!uniqueMap.has(item.id)) {
+            uniqueMap.set(item.id, item);
+          }
+        }
+        const sortedItems = Array.from(uniqueMap.values()).sort(
+          (a, b) => (b.rawId || 0) - (a.rawId || 0)
+        );
+
+        setLatencyMs(1);
+        setListings((prev) => {
+          if (prev.length === 0) return sortedItems.slice(0, 150);
+          const prevMap = new Map(prev.map((p) => [p.id, p]));
+          const incomingIds = new Set(sortedItems.map((i) => i.id));
+          const updated = sortedItems.map((incoming) => {
+            const existing = prevMap.get(incoming.id);
+            if (!existing) return { ...incoming, isNewDrop: true };
+            return existing.isNewDrop ? { ...incoming, isNewDrop: true } : incoming;
+          });
+          const brandNew = updated.filter((it) => it.isNewDrop && !prevMap.has(it.id)).length;
+          if (brandNew > 0) setNewDealsCount((c) => c + brandNew);
+          const retained = prev.filter(
+            (p) => !incomingIds.has(p.id) && targetMons.some((m) => m.name === p.matchedMonitorName)
+          );
+          return [...updated, ...retained].slice(0, 150);
+        });
+        return;
+      }
+
+      // 2. AD-HOC SEARCH OR GLOBAL VINTED FEED MODE:
+      const url = new URL('/api/vinted/live', window.location.origin);
       if (searchQ) {
         url.searchParams.set('search', searchQ);
       }
@@ -346,6 +463,12 @@ export default function App() {
             onToggleTurboSniper={() => setTurboSniper(!turboSniper)}
             onManualRefresh={() => fetchLiveRealtimeDrops(true)}
             isRefreshing={isRefreshing}
+            monitors={monitors}
+            monitorsMode={monitorsMode}
+            onToggleMonitorsMode={() => setMonitorsMode(!monitorsMode)}
+            selectedMonitorFilter={selectedMonitorFilter}
+            onSelectMonitorFilter={(id) => setSelectedMonitorFilter(id)}
+            onGoToMonitorsTab={() => setActiveTab('monitors')}
           />
         )}
 
