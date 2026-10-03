@@ -1332,10 +1332,14 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
 
           {/* Live Stream Pulse Row */}
           <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-400">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Streaming Real-Time Istantaneo (SSE + 0.6s Pulse)
+                Live Stream UE (<span className="font-mono text-emerald-300">0ms SSE + 0.6s pulse</span>)
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span className="px-2 py-0.5 rounded-full bg-blue-950/60 border border-blue-500/30 text-blue-300 font-medium">
+                🇪🇺 8 Nazioni: 🇫🇷 FR · 🇪🇸 ES · 🇵🇹 PT · 🇧🇪 BE · 🇳🇱 NL · 🇱🇺 LU · 🇦🇹 AT · 🇩🇪 DE
               </span>
               <span className="text-zinc-600">·</span>
               <span>Ultimo check: <strong className="text-zinc-200 font-mono">{new Date(lastLiveSyncTime || Date.now()).toLocaleTimeString()}</strong></span>
@@ -1462,13 +1466,11 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             {/* Content Details */}
             <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between space-y-1.5 sm:space-y-2">
               <div>
-                <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-0.5">
-                  <span className="font-extrabold uppercase tracking-wider text-[#09B1BA] truncate max-w-[110px]">{item.brand}</span>
-                  <span className="flex items-center gap-0.5 text-[9px] sm:text-[10px] text-zinc-400 shrink-0">
-                    {item.seller.countryFlag}
-                    <span className="text-amber-400 font-bold flex items-center">
-                      <Star className="w-2.5 h-2.5 fill-amber-400 inline" /> {item.seller.rating}
-                    </span>
+                <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-0.5 gap-1">
+                  <span className="font-extrabold uppercase tracking-wider text-[#09B1BA] truncate max-w-[100px]">{item.brand}</span>
+                  <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-zinc-300 bg-zinc-900/90 px-1.5 py-0.5 rounded border border-zinc-800 shrink-0" title={`Venditore da ${item.seller.country}`}>
+                    <span>{item.seller.countryFlag}</span>
+                    <span className="font-medium text-zinc-300">{item.seller.country}</span>
                   </span>
                 </div>
                 <h3 className="font-semibold text-zinc-100 text-[11px] sm:text-xs line-clamp-1 leading-snug group-hover:text-[#09B1BA] transition-colors" title={item.title}>

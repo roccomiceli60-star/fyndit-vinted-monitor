@@ -46,14 +46,14 @@ export const POPULAR_BRANDS = [
 ];
 
 export const VINTED_COUNTRIES = [
-  { code: 'IT', name: 'Italia', flag: '🇮🇹' },
   { code: 'FR', name: 'Francia', flag: '🇫🇷' },
   { code: 'ES', name: 'Spagna', flag: '🇪🇸' },
-  { code: 'DE', name: 'Germania', flag: '🇩🇪' },
-  { code: 'NL', name: 'Paesi Bassi', flag: '🇳🇱' },
-  { code: 'BE', name: 'Belgio', flag: '🇧🇪' },
   { code: 'PT', name: 'Portogallo', flag: '🇵🇹' },
-  { code: 'UK', name: 'Regno Unito', flag: '🇬🇧' },
+  { code: 'BE', name: 'Belgio', flag: '🇧🇪' },
+  { code: 'NL', name: 'Paesi Bassi', flag: '🇳🇱' },
+  { code: 'LU', name: 'Lussemburgo', flag: '🇱🇺' },
+  { code: 'AT', name: 'Austria', flag: '🇦🇹' },
+  { code: 'DE', name: 'Germania', flag: '🇩🇪' },
 ];
 
 export const POPULAR_SIZES = [

@@ -1,6 +1,130 @@
 import { VintedListing, VintedMonitor } from '../types';
 
 /**
+ * 8 Allowed European Countries strictly requested by user:
+ * • Francia (FR)
+ * • Spagna (ES)
+ * • Portogallo (PT)
+ * • Belgio (BE)
+ * • Paesi Bassi / Olanda (NL)
+ * • Lussemburgo (LU)
+ * • Austria (AT)
+ * • Germania (DE)
+ */
+export interface EuCountryMeta {
+  code: string;
+  name: string;
+  aliases: string[];
+  flag: string;
+  domain: string;
+}
+
+export const ALLOWED_EU_COUNTRIES: Record<string, EuCountryMeta> = {
+  FR: {
+    code: 'FR',
+    name: 'Francia',
+    aliases: ['fr', 'francia', 'france'],
+    flag: '🇫🇷',
+    domain: 'www.vinted.fr',
+  },
+  ES: {
+    code: 'ES',
+    name: 'Spagna',
+    aliases: ['es', 'spagna', 'spain', 'españa'],
+    flag: '🇪🇸',
+    domain: 'www.vinted.es',
+  },
+  PT: {
+    code: 'PT',
+    name: 'Portogallo',
+    aliases: ['pt', 'portogallo', 'portugal'],
+    flag: '🇵🇹',
+    domain: 'www.vinted.pt',
+  },
+  BE: {
+    code: 'BE',
+    name: 'Belgio',
+    aliases: ['be', 'belgio', 'belgium', 'belgique', 'belgië'],
+    flag: '🇧🇪',
+    domain: 'www.vinted.be',
+  },
+  NL: {
+    code: 'NL',
+    name: 'Paesi Bassi',
+    aliases: ['nl', 'paesi bassi', 'olanda', 'netherlands', 'nederland', 'holland'],
+    flag: '🇳🇱',
+    domain: 'www.vinted.nl',
+  },
+  LU: {
+    code: 'LU',
+    name: 'Lussemburgo',
+    aliases: ['lu', 'lussemburgo', 'luxembourg'],
+    flag: '🇱🇺',
+    domain: 'www.vinted.lu',
+  },
+  AT: {
+    code: 'AT',
+    name: 'Austria',
+    aliases: ['at', 'austria', 'österreich'],
+    flag: '🇦🇹',
+    domain: 'www.vinted.at',
+  },
+  DE: {
+    code: 'DE',
+    name: 'Germania',
+    aliases: ['de', 'germania', 'germany', 'deutschland'],
+    flag: '🇩🇪',
+    domain: 'www.vinted.de',
+  },
+};
+
+/**
+ * Checks if target country query (code or name) matches seller's country
+ */
+export function isCountryMatched(target: string, sellerCountry: string): boolean {
+  const t = target.trim().toLowerCase();
+  const s = sellerCountry.trim().toLowerCase();
+  if (!t || !s) return false;
+
+  for (const entry of Object.values(ALLOWED_EU_COUNTRIES)) {
+    const targetMatches = entry.aliases.some((a) => t === a || t.includes(a));
+    const sellerMatches = entry.aliases.some((a) => s === a || s.includes(a));
+    if (targetMatches && sellerMatches) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Validates that seller country belongs to the 8 allowed European countries
+ * and strictly excludes UK, Italy, or non-EU countries.
+ */
+export function isAllowedEuropeanCountry(sellerCountry: string): boolean {
+  const s = (sellerCountry || '').trim().toLowerCase();
+  if (!s) return false;
+
+  // Strict exclusions: UK / Italy / Non-EU
+  if (
+    s.includes('regno unito') ||
+    s.includes('united kingdom') ||
+    s.includes('uk') ||
+    s.includes('italia') ||
+    s.includes('italy') ||
+    s.includes('polonia') ||
+    s.includes('poland') ||
+    s.includes('stati uniti') ||
+    s.includes('usa')
+  ) {
+    return false;
+  }
+
+  return Object.values(ALLOWED_EU_COUNTRIES).some((entry) =>
+    entry.aliases.some((a) => s === a || s.includes(a))
+  );
+}
+
+/**
  * High-precision matcher that strictly isolates search to monitor specifications:
  * 1. Excluded keywords: strict rejection if ANY appear in title, brand or category.
  * 2. Min/Max price: strict rejection if outside boundaries.
@@ -8,6 +132,7 @@ import { VintedListing, VintedMonitor } from '../types';
  * 4. Brands isolation: If brands are defined, the item MUST match at least one brand.
  * 5. Category isolation: If specified and not 'all' / 'Tutte', item must be in category.
  * 6. Sizes isolation: If specified, item size must match.
+ * 7. Strict 8-Country isolation: Only items from the user's selected European nations among the 8 allowed countries.
  */
 export function matchListingToMonitor(listing: VintedListing, monitor: VintedMonitor): boolean {
   if (!monitor.isActive) return false;
@@ -69,31 +194,13 @@ export function matchListingToMonitor(listing: VintedListing, monitor: VintedMon
     }
   }
 
-  // If neither keywords nor brands were specified, fallback to monitor name only if it is not generic
-  if (!hasKeywords && !hasBrands) {
-    const nameClean = monitor.name.trim().toLowerCase();
-    if (nameClean && !nameClean.startsWith('monitor') && !nameClean.startsWith('nuovo')) {
-      const nameWords = nameClean.split(/\s+/).filter((w) => w.length > 2);
-      if (nameWords.length > 0) {
-        const matchesName = nameWords.some((nw) => fullText.includes(nw));
-        if (!matchesName) return false;
-      }
-    }
-  }
-
   // 5. Category filter
-  if (
-    monitor.category &&
-    monitor.category !== 'all' &&
-    !monitor.category.toLowerCase().includes('tutte') &&
-    !monitor.category.toLowerCase().includes('all')
-  ) {
+  if (monitor.category && monitor.category !== 'all' && !monitor.category.toLowerCase().includes('tutte')) {
     const monCatLower = monitor.category.toLowerCase();
     const matchesCat = catLower.includes(monCatLower) || titleLower.includes(monCatLower);
-    // Allow if subcategories match
     if (!matchesCat && Array.isArray(monitor.subcategories) && monitor.subcategories.length > 0) {
-      const matchSub = monitor.subcategories.some((sub) => fullText.includes(sub.toLowerCase()));
-      if (!matchSub) return false;
+      const matchesSub = monitor.subcategories.some((sub) => fullText.includes(sub.toLowerCase()));
+      if (!matchesSub) return false;
     } else if (!matchesCat) {
       return false;
     }
@@ -108,6 +215,33 @@ export function matchListingToMonitor(listing: VintedListing, monitor: VintedMon
     });
     if (!matchesSize) {
       return false;
+    }
+  }
+
+  // 7. Strict European Country Isolation
+  const sellerCountry = (listing.seller?.country || '').trim();
+
+  // Strictly block UK / English listings or non-EUR currency
+  if (listing.originalCurrency && listing.originalCurrency !== 'EUR') {
+    return false;
+  }
+  if (listing.originalCurrencySymbol === '£' || listing.originalCurrencySymbol === '$') {
+    return false;
+  }
+
+  if (!isAllowedEuropeanCountry(sellerCountry)) {
+    return false;
+  }
+
+  // Check monitor-specified country selection
+  if (Array.isArray(monitor.countries) && monitor.countries.length > 0) {
+    const cleanTargets = monitor.countries.map((c) => c.trim().toLowerCase());
+    const isAll = cleanTargets.includes('tutti') || cleanTargets.includes('tutte') || cleanTargets.length >= 8;
+    if (!isAll) {
+      const isMatched = cleanTargets.some((target) => isCountryMatched(target, sellerCountry));
+      if (!isMatched) {
+        return false;
+      }
     }
   }
 

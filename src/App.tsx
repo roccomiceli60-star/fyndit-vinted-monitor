@@ -171,8 +171,19 @@ export default function App() {
               for (const it of data.items) {
                 seenIdsRef.current.add(it.id);
               }
-              if (!activeSearchRef.current && activeBrandRef.current === 'Tutti') {
-                setListings(data.items);
+              if (!activeSearchRef.current) {
+                if (monitorsMode) {
+                  const activeMons = monitorsRef.current.filter((m) => m.isActive);
+                  const matched = data.items
+                    .filter((it: VintedListing) => activeMons.some((m) => matchListingToMonitor(it, m)))
+                    .map((it: VintedListing) => {
+                      const m = activeMons.find((mon) => matchListingToMonitor(it, mon));
+                      return m ? { ...it, matchedMonitorId: m.id, matchedMonitorName: m.name } : it;
+                    });
+                  setListings(matched);
+                } else if (activeBrandRef.current === 'Tutti') {
+                  setListings(data.items);
+                }
               }
             } else if (data.type === 'NEW_DROPS' && Array.isArray(data.items)) {
               handleIncomingDrops(data.items);

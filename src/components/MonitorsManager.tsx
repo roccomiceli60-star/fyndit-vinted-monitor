@@ -50,7 +50,16 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
   const [maxPrice, setMaxPrice] = useState<number>(50);
   const [minPrice, setMinPrice] = useState<number>(5);
   const [minCondition, setMinCondition] = useState<ConditionType | 'Tutte'>('Tutte');
-  const [selectedCountries, setSelectedCountries] = useState<string[]>(['IT', 'FR', 'ES']);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([
+    'FR',
+    'ES',
+    'PT',
+    'BE',
+    'NL',
+    'LU',
+    'AT',
+    'DE',
+  ]);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
 
   // Icon mapping
@@ -331,8 +340,19 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
 
               {/* Countries */}
               <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-                <Globe className="w-3.5 h-3.5 text-zinc-500" />
-                <span>Paesi: {mon.countries?.join(', ') || 'Tutti'}</span>
+                <Globe className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                <span className="truncate">
+                  {mon.countries && mon.countries.length > 0 && mon.countries.length < 8
+                    ? mon.countries
+                        .map((c) => {
+                          const found = VINTED_COUNTRIES.find(
+                            (vc) => vc.code.toLowerCase() === c.toLowerCase() || vc.name.toLowerCase() === c.toLowerCase()
+                          );
+                          return found ? `${found.flag} ${found.code}` : c;
+                        })
+                        .join(' · ')
+                    : '🇪🇺 8 Paesi UE (FR, ES, PT, BE, NL, LU, AT, DE)'}
+                </span>
               </div>
             </div>
 
@@ -663,9 +683,31 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
 
               {/* Step 6: Paesi Vinted Monitorati */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
-                  Paesi Vinted UE
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
+                    Paesi Vinted UE (Solo gli 8 Paesi Ammessi)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCountries(VINTED_COUNTRIES.map((c) => c.code))}
+                      className="text-[11px] font-bold text-teal-400 hover:text-teal-300 underline transition-colors"
+                    >
+                      Tutti e 8
+                    </button>
+                    <span className="text-zinc-600 text-xs">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCountries([])}
+                      className="text-[11px] text-zinc-400 hover:text-zinc-300 underline transition-colors"
+                    >
+                      Deseleziona
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  Rileva automaticamente annunci nativi in lingua locale da Francia, Spagna, Portogallo, Belgio, Paesi Bassi, Lussemburgo, Austria e Germania.
+                </p>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {VINTED_COUNTRIES.map((ct) => (
                     <button

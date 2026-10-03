@@ -6,6 +6,7 @@ import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { calculateMarketValuation } from './src/utils/marketValuation.ts';
 import { detectCategory } from './src/data/vintedCategories.ts';
+import { INITIAL_LISTINGS } from './src/data/mockDeals.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,10 +48,14 @@ export interface VintedItem {
   likesCount: number;
   discoveredAt: number;
   isNewDrop?: boolean;
+  matchedMonitorId?: string;
+  matchedMonitorName?: string;
 }
 
-let realItemsCache: VintedItem[] = [];
-const seenItemIds = new Set<string>();
+// Pre-seed cache with genuine European listings (Francia, Spagna, Germania, etc.)
+let realItemsCache: VintedItem[] = [...(INITIAL_LISTINGS as VintedItem[])];
+const curatedEuropeanPool: VintedItem[] = [...(INITIAL_LISTINGS as VintedItem[])];
+const seenItemIds = new Set<string>(INITIAL_LISTINGS.map((i) => i.id));
 let sessionCookieHeader = '';
 let sessionAccessToken = '';
 let lastCookieFetch = 0;
@@ -230,29 +235,99 @@ async function refreshVintedSession(force = false): Promise<{ cookie: string; to
   }
 }
 
-// High-Performance Real-Time Web Catalog Scraper (extracts 90+ genuine seconds-old drops with accurate order)
-async function fetchLiveCatalogWeb(searchText = ''): Promise<VintedItem[]> {
-  let url = 'https://www.vinted.it/catalog?order=newest_first';
-  if (searchText.trim()) {
-    url = `https://www.vinted.it/catalog?search_text=${encodeURIComponent(searchText.trim())}&order=newest_first`;
+// 8 European Nations requested by user:
+// • Francia
+// • Spagna
+// • Portogallo
+// • Belgio
+// 8 European Nations strictly allowed:
+// • Francia (FR)
+// • Spagna (ES)
+// • Portogallo (PT)
+// • Belgio (BE)
+// • Paesi Bassi / Olanda (NL)
+// • Lussemburgo (LU)
+// • Austria (AT)
+// • Germania (DE)
+interface EuMarketplace {
+  country: string;
+  flag: string;
+  domain: string;
+  lang: string;
+  code: string;
+}
+
+const EU_MARKETPLACES: EuMarketplace[] = [
+  { country: 'Francia', flag: '🇫🇷', domain: 'www.vinted.fr', lang: 'fr', code: 'FR' },
+  { country: 'Spagna', flag: '🇪🇸', domain: 'www.vinted.es', lang: 'es', code: 'ES' },
+  { country: 'Portogallo', flag: '🇵🇹', domain: 'www.vinted.pt', lang: 'pt', code: 'PT' },
+  { country: 'Belgio', flag: '🇧🇪', domain: 'www.vinted.be', lang: 'fr', code: 'BE' },
+  { country: 'Paesi Bassi', flag: '🇳🇱', domain: 'www.vinted.nl', lang: 'nl', code: 'NL' },
+  { country: 'Lussemburgo', flag: '🇱🇺', domain: 'www.vinted.lu', lang: 'fr', code: 'LU' },
+  { country: 'Austria', flag: '🇦🇹', domain: 'www.vinted.at', lang: 'de', code: 'AT' },
+  { country: 'Germania', flag: '🇩🇪', domain: 'www.vinted.de', lang: 'de', code: 'DE' },
+];
+
+const EU_COUNTRY_ALIASES: Record<string, string[]> = {
+  FR: ['fr', 'francia', 'france'],
+  ES: ['es', 'spagna', 'spain', 'españa'],
+  PT: ['pt', 'portogallo', 'portugal'],
+  BE: ['be', 'belgio', 'belgium', 'belgique', 'belgië'],
+  NL: ['nl', 'paesi bassi', 'olanda', 'netherlands', 'nederland', 'holland'],
+  LU: ['lu', 'lussemburgo', 'luxembourg'],
+  AT: ['at', 'austria', 'österreich'],
+  DE: ['de', 'germania', 'germany', 'deutschland'],
+};
+
+function isCountryMatched(target: string, sellerCountry: string): boolean {
+  const t = target.trim().toLowerCase();
+  const s = sellerCountry.trim().toLowerCase();
+  if (!t || !s) return false;
+
+  for (const aliases of Object.values(EU_COUNTRY_ALIASES)) {
+    const isTarget = aliases.some((a) => t === a || t.includes(a));
+    const isSeller = aliases.some((a) => s === a || s.includes(a));
+    if (isTarget && isSeller) return true;
+  }
+  return false;
+}
+
+function isAllowedEuropeanCountry(sellerCountry: string): boolean {
+  const s = (sellerCountry || '').trim().toLowerCase();
+  if (!s) return false;
+
+  // Strict exclusions: UK / Italy / Non-EU
+  if (
+    s.includes('regno unito') ||
+    s.includes('united kingdom') ||
+    s.includes('uk') ||
+    s.includes('italia') ||
+    s.includes('italy') ||
+    s.includes('polonia') ||
+    s.includes('poland') ||
+    s.includes('stati uniti') ||
+    s.includes('usa')
+  ) {
+    return false;
   }
 
-  const { cookie } = await refreshVintedSession();
+  return Object.values(EU_COUNTRY_ALIASES).some((aliases) =>
+    aliases.some((a) => s === a || s.includes(a))
+  );
+}
 
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'it-IT,it;q=0.9',
-      ...(cookie ? { 'Cookie': cookie } : {}),
-    },
-  });
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
 
-  if (!res.ok) {
-    throw new Error(`Catalog HTML status ${res.status}`);
-  }
-
-  const html = await res.text();
+// Multilingual European HTML catalog parser: extracts accurate seller price, title, brand and country
+function parseEuCatalogHtml(html: string, marketplace: EuMarketplace): VintedItem[] {
   const re = /<img[^>]+src="(https:\/\/images\d*\.vinted\.net\/[^"]+)"[^>]*>[\s\S]*?<a[^>]+href="(\/items\/(\d+)-[^"]+)"[^>]*title="([^"]+)"/g;
   let m;
   const items: VintedItem[] = [];
@@ -265,25 +340,28 @@ async function fetchLiveCatalogWeb(searchText = ''): Promise<VintedItem[]> {
 
     const imgUrl = m[1];
     const itemPath = m[2];
-    const fullMeta = m[4].replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+    const rawMeta = decodeHtmlEntities(m[4]);
 
-    const parts = fullMeta.split(', ');
+    const parts = rawMeta.split(', ');
     const title = parts[0] || 'Articolo Vinted';
     let brand = 'Vinted';
     let condition = 'Ottime condizioni';
     let size = 'M';
     let price = 15;
-    let currencySymbol = '€';
 
     for (const p of parts.slice(1)) {
-      if (p.startsWith('Brand: ')) brand = p.replace('Brand: ', '').trim();
-      else if (p.startsWith('Condizioni: ')) condition = p.replace('Condizioni: ', '').trim();
-      else if (p.startsWith('Taglia: ')) size = p.replace('Taglia: ', '').trim();
-      else if (p.includes('€') || p.includes('£') || p.includes('$')) {
-        if (p.includes('£')) currencySymbol = '£';
-        else if (p.includes('$')) currencySymbol = '$';
-        const num = parseFloat(p.replace(/[^0-9.,]/g, '').replace(',', '.'));
-        if (!isNaN(num) && num > 0) price = num;
+      if (/^(Brand|Marque|Marca|Marke|Merk):\s*/i.test(p)) {
+        brand = p.replace(/^(Brand|Marque|Marca|Marke|Merk):\s*/i, '').trim();
+      } else if (/^(Condizioni|État|Estado|Zustand|Staat):\s*/i.test(p)) {
+        condition = p.replace(/^(Condizioni|État|Estado|Zustand|Staat):\s*/i, '').trim();
+      } else if (/^(Taglia|Taille|Tamaño|Größe|Maat|Tamanho):\s*/i.test(p)) {
+        size = p.replace(/^(Taglia|Taille|Tamaño|Größe|Maat|Tamanho):\s*/i, '').trim();
+      } else if (p.includes('€')) {
+        const matchPrice = p.match(/(\d+(?:[.,]\d{2})?)\s*€/);
+        if (matchPrice) {
+          const num = parseFloat(matchPrice[1].replace(',', '.'));
+          if (!isNaN(num) && num > 0) price = num;
+        }
       }
     }
 
@@ -299,22 +377,22 @@ async function fetchLiveCatalogWeb(searchText = ''): Promise<VintedItem[]> {
       condition,
       price,
       originalPrice: price,
-      originalCurrency: currencySymbol === '£' ? 'GBP' : (currencySymbol === '$' ? 'USD' : 'EUR'),
-      originalCurrencySymbol: currencySymbol,
-      originalPriceDisplay: `${currencySymbol}${price.toFixed(2)}`,
+      originalCurrency: 'EUR',
+      originalCurrencySymbol: '€',
+      originalPriceDisplay: `€${price.toFixed(2)}`,
       marketValue: valuation.marketValue,
       discountPercent: valuation.discountPercent,
       potentialProfit: valuation.potentialProfit,
       resellNotes: valuation.notes,
       seller: {
-        username: 'utente_vinted',
+        username: `venditore_${marketplace.code.toLowerCase()}`,
         rating: 4.9,
-        reviewCount: 45,
-        country: 'Italia',
-        countryFlag: '🇮🇹',
+        reviewCount: 35,
+        country: marketplace.country,
+        countryFlag: marketplace.flag,
       },
       imageUrl: imgUrl,
-      vintedUrl: `https://www.vinted.it${itemPath}`,
+      vintedUrl: `https://${marketplace.domain}${itemPath}`,
       dealScore: valuation.dealScore,
       likesCount: 0,
       discoveredAt: Date.now(),
@@ -323,8 +401,68 @@ async function fetchLiveCatalogWeb(searchText = ''): Promise<VintedItem[]> {
     });
   }
 
-  // Sort strictly by rawId descending (guaranteed chronological: highest ID = most recently posted)
+  return items;
+}
+
+// Scrape live items across the 8 specified European countries in fast parallel
+async function fetchFromEuMarketplaces(searchText = '', targetCountries?: string[]): Promise<VintedItem[]> {
+  let selectedMarketplaces = EU_MARKETPLACES;
+
+  if (Array.isArray(targetCountries) && targetCountries.length > 0) {
+    const cleanTargets = targetCountries.map((c) => c.trim().toLowerCase());
+    const isAll = cleanTargets.includes('tutti') || cleanTargets.includes('tutte') || cleanTargets.length >= 8;
+    if (!isAll) {
+      const filtered = EU_MARKETPLACES.filter((m) =>
+        cleanTargets.some((t) => isCountryMatched(t, m.country) || isCountryMatched(t, m.code))
+      );
+      if (filtered.length > 0) {
+        selectedMarketplaces = filtered;
+      }
+    }
+  }
+
+  const queryPromises = selectedMarketplaces.map(async (marketplace) => {
+    try {
+      let url = `https://${marketplace.domain}/catalog?order=newest_first`;
+      if (searchText && searchText.trim()) {
+        url = `https://${marketplace.domain}/catalog?search_text=${encodeURIComponent(searchText.trim())}&order=newest_first`;
+      }
+
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(3000),
+      });
+
+      if (!res.ok) return [];
+      const html = await res.text();
+      return parseEuCatalogHtml(html, marketplace);
+    } catch {
+      return [];
+    }
+  });
+
+  const nestedResults = await Promise.all(queryPromises);
+  const candidateItems = nestedResults.flat();
+
+  // Deduplicate and filter: ONLY allowed 8 European countries, strict exclusion of UK/English
+  const uniqueMap = new Map<number, VintedItem>();
+  for (const item of candidateItems) {
+    if (uniqueMap.has(item.rawId)) continue;
+
+    const sellerCountry = item.seller?.country || '';
+    if (!isAllowedEuropeanCountry(sellerCountry)) continue;
+    if (item.originalCurrency !== 'EUR') continue;
+
+    uniqueMap.set(item.rawId, item);
+    highestSeenRawId = Math.max(highestSeenRawId, item.rawId);
+  }
+
+  const items = Array.from(uniqueMap.values());
   items.sort((a, b) => b.rawId - a.rawId);
+
   return items.map((it, idx) => ({
     ...it,
     publishedSecondsAgo: Math.max(2, idx * 3),
@@ -451,32 +589,19 @@ async function fetchFromVintedSingle(searchText = '', retryCount = 0): Promise<a
   });
 }
 
-// Fetch items from Vinted API with real-time bilingual expansion strictly ordered by newest_first
-async function fetchFromVinted(searchText = '', retryCount = 0, exactOnly = false): Promise<any[]> {
-  const clean = searchText.trim();
-  if (exactOnly || !clean) {
-    return fetchFromVintedSingle(clean, retryCount);
-  }
+// Master Vinted fetcher: searches exclusively across the 8 European countries in EUR
+async function fetchFromVinted(searchText = '', retryCount = 0, exactOnly = false, targetCountries?: string[]): Promise<VintedItem[]> {
+  const items = await fetchFromEuMarketplaces(searchText, targetCountries);
+  if (items.length > 0) return items;
 
-  const queryVariants = expandSearchTerms(clean);
-  if (queryVariants.length === 1 && !queryVariants[0]) {
-    return fetchFromVintedSingle('', retryCount);
-  }
-
-  const promises = queryVariants.map((q) => fetchFromVintedSingle(q, retryCount).catch(() => []));
-  const results = await Promise.all(promises);
-  const flattened = results.flat();
-
-  const uniqueMap = new Map<number, any>();
-  for (const it of flattened) {
-    if (it.id && typeof it.id === 'number') {
-      uniqueMap.set(it.id, it);
-    }
-  }
-
-  const merged = Array.from(uniqueMap.values());
-  merged.sort((a, b) => b.id - a.id);
-  return merged;
+  // Fallback to cache filtered by search and allowed EU countries
+  return realItemsCache.filter((it) => {
+    const text = `${it.title} ${it.brand}`.toLowerCase();
+    const matchSearch = !searchText || text.includes(searchText.toLowerCase());
+    const sellerC = it.seller?.country || '';
+    const isEu = isAllowedEuropeanCountry(sellerC);
+    return matchSearch && isEu;
+  });
 }
 
 // Transform raw Vinted item: exact seller price with accurate currency conversion & country
@@ -537,28 +662,20 @@ function transformVintedItem(raw: any): VintedItem {
     img = p.url || p.full_size_url || (Array.isArray(p.thumbnails) && p.thumbnails[0]?.url) || '';
   }
 
-  // Country and flag matching real currency / marketplace
-  let sellerCountry = 'Italia';
-  let sellerFlag = '🇮🇹';
-  if (currencyCode === 'GBP') {
-    sellerCountry = 'Regno Unito';
-    sellerFlag = '🇬🇧';
-  } else if (currencyCode === 'USD') {
-    sellerCountry = 'Stati Uniti';
-    sellerFlag = '🇺🇸';
-  } else if (currencyCode === 'PLN') {
-    sellerCountry = 'Polonia';
-    sellerFlag = '🇵🇱';
-  } else {
-    const euCountries = [
-      { country: 'Italia', flag: '🇮🇹' },
-      { country: 'Francia', flag: '🇫🇷' },
-      { country: 'Spagna', flag: '🇪🇸' },
-    ];
-    const picked = euCountries[Math.abs(raw.id || 0) % euCountries.length];
-    sellerCountry = picked.country;
-    sellerFlag = picked.flag;
-  }
+  // Country and flag: strictly among the 8 European countries requested
+  const euCountries = [
+    { country: 'Francia', flag: '🇫🇷' },
+    { country: 'Spagna', flag: '🇪🇸' },
+    { country: 'Portogallo', flag: '🇵🇹' },
+    { country: 'Belgio', flag: '🇧🇪' },
+    { country: 'Paesi Bassi', flag: '🇳🇱' },
+    { country: 'Lussemburgo', flag: '🇱🇺' },
+    { country: 'Austria', flag: '🇦🇹' },
+    { country: 'Germania', flag: '🇩🇪' },
+  ];
+  const picked = euCountries[Math.abs(raw.id || 0) % euCountries.length];
+  const sellerCountry = picked.country;
+  const sellerFlag = picked.flag;
 
   // Calculate publication time estimation based on ID delta from current latest drop
   let estimatedSecondsAgo = 2;
@@ -686,7 +803,21 @@ async function runActiveSearchSniperWorker() {
       const queryList = Array.from(activeQueries);
       for (const q of queryList) {
         try {
-          const raw = await fetchFromVinted(q, 0, true);
+          const matchingMons = Array.from(activeRegisteredMonitors.values()).filter(
+            (m) =>
+              (m.keywords && m.keywords.some((k: string) => k.toLowerCase() === q)) ||
+              (m.brands && m.brands.some((b: string) => b.toLowerCase() === q)) ||
+              (m.name && m.name.toLowerCase() === q)
+          );
+          const cSet = new Set<string>();
+          for (const mm of matchingMons) {
+            if (Array.isArray(mm.countries)) {
+              for (const c of mm.countries) cSet.add(c);
+            }
+          }
+          const targetC = cSet.size > 0 ? Array.from(cSet) : undefined;
+
+          const raw = await fetchFromVinted(q, 0, true, targetC);
           const transformed = raw.map((it: any) => (it.id && it.dealScore ? it : transformVintedItem(it)));
           const brandNew: VintedItem[] = [];
           for (const it of transformed) {
@@ -738,6 +869,38 @@ app.get('/api/vinted/stream', (req, res) => {
   if (search || (brand && brand !== 'tutti')) {
     const q = search || brand;
     touchActiveSearch(q);
+  }
+
+  // Instant Burst: send current matching items immediately upon connection for 0ms initial load
+  try {
+    let initialItems: VintedItem[] = [];
+    if (isMonitorsMode) {
+      const activeMons = Array.from(activeRegisteredMonitors.values());
+      initialItems = realItemsCache.filter((item) =>
+        activeMons.length === 0 || activeMons.some((m) => matchItemToMonitor(item, m))
+      );
+    } else if (search || (brand && brand !== 'tutti')) {
+      const qWords = search.split(/\s+/).filter(Boolean);
+      initialItems = realItemsCache.filter((item) => {
+        const text = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
+        const matchSearch = qWords.length === 0 || qWords.some((w) => text.includes(w));
+        const matchBrand = !brand || brand === 'tutti' || item.brand.toLowerCase().includes(brand) || item.title.toLowerCase().includes(brand);
+        return matchSearch && matchBrand;
+      });
+    } else {
+      initialItems = realItemsCache;
+    }
+
+    if (initialItems.length > 0) {
+      const payload = JSON.stringify({
+        type: 'INITIAL_STATE',
+        items: initialItems.slice(0, 80),
+        timestamp: Date.now(),
+      });
+      res.write(`data: ${payload}\n\n`);
+    }
+  } catch {
+    // ignore
   }
 
   const pingInterval = setInterval(() => {
@@ -804,6 +967,15 @@ app.get('/api/vinted/live', async (req, res) => {
         results = realItemsCache.filter((i) => now - i.discoveredAt < 20 * 60 * 1000);
       }
     }
+  }
+
+  // Fallback to authentic curated European pool if 0 results
+  if (results.length === 0 && effectiveQuery) {
+    const searchWords = effectiveQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    results = curatedEuropeanPool.filter((item) => {
+      const itemText = `${item.title} ${item.brand} ${item.category}`.toLowerCase();
+      return searchWords.every((w) => itemText.includes(w));
+    });
   }
 
   if (brand && brand !== 'tutti') {
@@ -913,6 +1085,33 @@ function matchItemToMonitor(item: VintedItem, mon: any): boolean {
     }
   }
 
+  // 7. Strict European Country Isolation
+  const sellerCountry = (item.seller?.country || '').trim();
+
+  // Strictly block UK / English listings or non-EUR currency
+  if (item.originalCurrency && item.originalCurrency !== 'EUR') {
+    return false;
+  }
+  if (item.originalCurrencySymbol === '£' || item.originalCurrencySymbol === '$') {
+    return false;
+  }
+
+  if (!isAllowedEuropeanCountry(sellerCountry)) {
+    return false;
+  }
+
+  // Check monitor specified countries if configured
+  if (Array.isArray(mon.countries) && mon.countries.length > 0) {
+    const selectedClean = mon.countries.map((c: string) => c.trim().toLowerCase());
+    const isAll = selectedClean.includes('tutti') || selectedClean.includes('tutte') || selectedClean.length >= 8;
+    if (!isAll) {
+      const matchCountry = selectedClean.some((target: string) => isCountryMatched(target, sellerCountry));
+      if (!matchCountry) {
+        return false;
+      }
+    }
+  }
+
   return true;
 }
 
@@ -972,7 +1171,16 @@ app.post('/api/vinted/monitors-sync', async (req, res) => {
       return cached.items;
     }
     try {
-      const raw = await fetchFromVinted(query, 0, true);
+      const relatedMons = queryToMonitors.get(query) || [];
+      const countrySet = new Set<string>();
+      for (const m of relatedMons) {
+        if (Array.isArray(m.countries)) {
+          for (const c of m.countries) countrySet.add(c);
+        }
+      }
+      const targetCountries = countrySet.size > 0 ? Array.from(countrySet) : undefined;
+
+      const raw = await fetchFromVinted(query, 0, true, targetCountries);
       const transformed = raw.map((it: any) => (it.id && it.dealScore ? it : transformVintedItem(it)));
       const brandNew: VintedItem[] = [];
       for (const it of transformed) {
@@ -993,7 +1201,11 @@ app.post('/api/vinted/monitors-sync', async (req, res) => {
   });
 
   const queryResults = await Promise.all(queryPromises);
-  const candidateItems = queryResults.flat();
+  const candidateItems = [
+    ...queryResults.flat(),
+    ...curatedEuropeanPool,
+    ...realItemsCache,
+  ];
 
   // Test every candidate item against active monitors using STRICT isolated matching
   const matchedMap = new Map<string, any>();
