@@ -40,7 +40,7 @@ export default function App() {
 
   // Monitor-driven Live Deals mode (defaults to TRUE: only load what is monitored!)
   const [monitorsMode, setMonitorsMode] = useState<boolean>(true);
-  const [selectedMonitorFilter, setSelectedMonitorFilter] = useState<string>('all');
+  const [selectedMonitorFilter, setSelectedMonitorFilter] = useState<string[]>(['all']);
 
   const seenIdsRef = useRef<Set<string>>(new Set());
   const activeSearchRef = useRef<string>('');
@@ -49,7 +49,7 @@ export default function App() {
   const isFetchingRef = useRef<boolean>(false);
   const monitorsRef = useRef<VintedMonitor[]>(monitors);
   const monitorsModeRef = useRef<boolean>(monitorsMode);
-  const selectedMonitorFilterRef = useRef<string>(selectedMonitorFilter);
+  const selectedMonitorFilterRef = useRef<string[]>(selectedMonitorFilter);
 
   useEffect(() => {
     try {
@@ -88,10 +88,11 @@ export default function App() {
     if (!searchQ && isMonMode) {
       const activeMons = monitorsRef.current.filter((m) => m.isActive);
       eligibleItems = [];
-      const currentTargetId = selectedMonitorFilterRef.current;
-      const relevantMons = currentTargetId === 'all'
+      const currentFilters = selectedMonitorFilterRef.current;
+      const isAll = currentFilters.includes('all') || currentFilters.length === 0;
+      const relevantMons = isAll
         ? activeMons
-        : activeMons.filter((m) => m.id === currentTargetId);
+        : activeMons.filter((m) => currentFilters.includes(m.id));
 
       for (const it of newItems) {
         const matchingMon = relevantMons.find((m) => matchListingToMonitor(it, m));
@@ -174,10 +175,16 @@ export default function App() {
               if (!activeSearchRef.current) {
                 if (monitorsMode) {
                   const activeMons = monitorsRef.current.filter((m) => m.isActive);
+                  const currentFilters = selectedMonitorFilterRef.current;
+                  const isAll = currentFilters.includes('all') || currentFilters.length === 0;
+                  const targetMons = isAll
+                    ? activeMons
+                    : activeMons.filter((m) => currentFilters.includes(m.id));
+
                   const matched = data.items
-                    .filter((it: VintedListing) => activeMons.some((m) => matchListingToMonitor(it, m)))
+                    .filter((it: VintedListing) => targetMons.some((m) => matchListingToMonitor(it, m)))
                     .map((it: VintedListing) => {
-                      const m = activeMons.find((mon) => matchListingToMonitor(it, mon));
+                      const m = targetMons.find((mon) => matchListingToMonitor(it, mon));
                       return m ? { ...it, matchedMonitorId: m.id, matchedMonitorName: m.name } : it;
                     });
                   setListings(matched);
@@ -236,17 +243,19 @@ export default function App() {
           return;
         }
 
-        const currentTargetId = selectedMonitorFilterRef.current;
-        const targetMons = currentTargetId === 'all'
+        const currentFilters = selectedMonitorFilterRef.current;
+        const isAll = currentFilters.includes('all') || currentFilters.length === 0;
+        const targetMons = isAll
           ? activeMons
-          : activeMons.filter((m) => m.id === currentTargetId);
+          : activeMons.filter((m) => currentFilters.includes(m.id));
 
         const syncRes = await fetch('/api/vinted/monitors-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             monitors: activeMons,
-            targetMonitorId: currentTargetId,
+            targetMonitorIds: isAll ? undefined : currentFilters,
+            targetMonitorId: isAll ? 'all' : currentFilters[0],
           }),
           signal: AbortSignal.timeout(4500),
         });
@@ -471,8 +480,31 @@ export default function App() {
     setMonitors((prev) => [created, ...prev]);
   };
 
+  const handleToggleMonitorFilter = (monId: string) => {
+    setSelectedMonitorFilter((prev) => {
+      if (monId === 'all') {
+        return ['all'];
+      }
+
+      const wasAll = prev.includes('all') || prev.length === 0;
+      if (wasAll) {
+        // If clicking a monitor when all were selected, switch to just this monitor
+        return [monId];
+      }
+
+      if (prev.includes(monId)) {
+        // Unselecting this monitor
+        const filtered = prev.filter((id) => id !== monId);
+        return filtered.length === 0 ? ['all'] : filtered;
+      } else {
+        // Combining this monitor with existing selections (e.g. 2, 3 or 4 monitors together!)
+        return [...prev, monId];
+      }
+    });
+  };
+
   const handleViewMonitorInFeed = (monId: string) => {
-    setSelectedMonitorFilter(monId);
+    setSelectedMonitorFilter([monId]);
     setMonitorsMode(true);
     setActiveSearch('');
     setActiveTab('feed');
@@ -556,7 +588,7 @@ export default function App() {
             monitorsMode={monitorsMode}
             onToggleMonitorsMode={() => setMonitorsMode(!monitorsMode)}
             selectedMonitorFilter={selectedMonitorFilter}
-            onSelectMonitorFilter={(id) => setSelectedMonitorFilter(id)}
+            onSelectMonitorFilter={handleToggleMonitorFilter}
             onGoToMonitorsTab={() => setActiveTab('monitors')}
             lastLiveSyncTime={lastLiveSyncTime}
           />

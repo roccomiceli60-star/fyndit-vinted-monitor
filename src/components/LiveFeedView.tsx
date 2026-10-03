@@ -57,7 +57,7 @@ interface LiveFeedViewProps {
   monitors?: VintedMonitor[];
   monitorsMode?: boolean;
   onToggleMonitorsMode?: () => void;
-  selectedMonitorFilter?: string;
+  selectedMonitorFilter?: string | string[];
   onSelectMonitorFilter?: (id: string) => void;
   onGoToMonitorsTab?: () => void;
   lastLiveSyncTime?: number;
@@ -81,6 +81,16 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   onGoToMonitorsTab,
   lastLiveSyncTime,
 }) => {
+  // Normalize multi-monitor selection (supports array of selected monitor IDs or 'all')
+  const selectedFiltersArray: string[] = useMemo(() => {
+    if (Array.isArray(selectedMonitorFilter)) {
+      return selectedMonitorFilter;
+    }
+    return selectedMonitorFilter ? [selectedMonitorFilter] : ['all'];
+  }, [selectedMonitorFilter]);
+
+  const isAllMonitors = selectedFiltersArray.includes('all') || selectedFiltersArray.length === 0;
+
   // Grid layout mode: '2' = 2 per row on iPhone/mobile, '1' = 1 per row
   const [gridColumns, setGridColumns] = useState<'1' | '2'>('2');
 
@@ -287,13 +297,13 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
     return listings
       .filter((item) => {
         // Strict Monitor Mode isolation:
-        // Evaluates every item against active monitors using exact keyword/brand isolation
+        // Evaluates every item against active monitors (supports multiple combined monitors working together)
         if (monitorsMode && !isActivelySearching) {
-          if (selectedMonitorFilter !== 'all') {
-            const targetMon = monitors.find((m) => m.id === selectedMonitorFilter);
-            if (!targetMon || !matchListingToMonitor(item, targetMon)) {
-              return false;
-            }
+          if (!isAllMonitors) {
+            const selectedMons = monitors.filter((m) => m.isActive && selectedFiltersArray.includes(m.id));
+            if (selectedMons.length === 0) return false;
+            const matchesAnySelected = selectedMons.some((m) => matchListingToMonitor(item, m));
+            if (!matchesAnySelected) return false;
           } else {
             const activeMons = monitors.filter((m) => m.isActive);
             if (activeMons.length === 0) return false;
@@ -1286,35 +1296,86 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             </div>
           </div>
 
-          {/* Active Monitor Chips to filter feed */}
+          {/* Active Monitor Chips to filter feed (Supports combining 2, 3, 4 or more monitors together) */}
           {activeMonitors.length > 0 ? (
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 scrollbar-none">
-              <button
-                type="button"
-                onClick={() => onSelectMonitorFilter?.('all')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold shrink-0 transition-all ${
-                  selectedMonitorFilter === 'all'
-                    ? 'bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/20'
-                    : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
-                }`}
-              >
-                🎯 Tutti i Monitor ({activeMonitors.length})
-              </button>
-              {activeMonitors.map((m) => (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 scrollbar-none">
                 <button
-                  key={m.id}
                   type="button"
-                  onClick={() => onSelectMonitorFilter?.(m.id)}
-                  className={`px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-all flex items-center gap-1.5 ${
-                    selectedMonitorFilter === m.id
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/60 shadow-md'
+                  onClick={() => onSelectMonitorFilter?.('all')}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold shrink-0 transition-all flex items-center gap-1.5 ${
+                    isAllMonitors
+                      ? 'bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/20'
                       : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
                   }`}
                 >
-                  <span>⚡ {m.name}</span>
-                  <span className="text-[10px] text-zinc-400 font-mono">(&lt;€{m.maxPrice})</span>
+                  <Target className="w-3.5 h-3.5" />
+                  <span>Tutti i Monitor ({activeMonitors.length})</span>
                 </button>
-              ))}
+                {activeMonitors.map((m) => {
+                  const isChipActive = !isAllMonitors && selectedFiltersArray.includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => onSelectMonitorFilter?.(m.id)}
+                      className={`px-3 py-1.5 rounded-full text-[11px] shrink-0 transition-all flex items-center gap-1.5 ${
+                        isChipActive
+                          ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400 ring-2 ring-cyan-500/30 shadow-md font-bold'
+                          : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 font-medium'
+                      }`}
+                      title={
+                        isChipActive
+                          ? 'Clicca per rimuovere questo monitor dalla combinazione'
+                          : 'Clicca per combinare questo monitor con gli altri selezionati'
+                      }
+                    >
+                      {isChipActive ? (
+                        <Check className="w-3.5 h-3.5 text-cyan-400 stroke-[3]" />
+                      ) : (
+                        <Plus className="w-3.5 h-3.5 text-zinc-500" />
+                      )}
+                      <span>{m.name}</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">(&lt;€{m.maxPrice})</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Informative Helper for Combining Monitors */}
+              {!isAllMonitors && selectedFiltersArray.length > 1 && (
+                <div className="flex items-center justify-between text-[11px] bg-cyan-950/25 border border-cyan-500/30 rounded-xl px-3 py-1.5">
+                  <div className="flex items-center gap-1.5 text-cyan-300 font-semibold truncate">
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span className="truncate">
+                      <strong>{selectedFiltersArray.length} Monitor combinati assieme</strong>: ricevi drop simultanei in tempo reale. Clicca su altri monitor per aggiungerli!
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSelectMonitorFilter?.('all')}
+                    className="text-xs text-cyan-400 hover:text-cyan-200 underline font-bold shrink-0 ml-2"
+                  >
+                    Tutti i monitor
+                  </button>
+                </div>
+              )}
+
+              {!isAllMonitors && selectedFiltersArray.length === 1 && (
+                <div className="flex items-center justify-between text-[11px] px-1 text-zinc-400">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-cyan-400 font-bold">💡 Multi-Monitor:</span>
+                    <span>Puoi cliccare su un 2°, 3° o 4° monitor per farli lavorare assieme contemporaneamente!</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSelectMonitorFilter?.('all')}
+                    className="text-xs text-zinc-400 hover:text-cyan-300 underline font-medium shrink-0 ml-2"
+                  >
+                    Tutti i monitor
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between">
@@ -1346,7 +1407,17 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-zinc-400">
-                Filtro: <strong className="text-cyan-400 font-medium">{selectedMonitorFilter === 'all' ? 'Tutti i Monitor' : activeMonitors.find(m => m.id === selectedMonitorFilter)?.name || 'Monitor'}</strong>
+                Filtro:{' '}
+                <strong className="text-cyan-400 font-medium">
+                  {isAllMonitors
+                    ? `Tutti i Monitor (${activeMonitors.length})`
+                    : selectedFiltersArray.length === 1
+                    ? activeMonitors.find((m) => m.id === selectedFiltersArray[0])?.name || '1 Monitor'
+                    : `${selectedFiltersArray.length} Monitor Combinati (${activeMonitors
+                        .filter((m) => selectedFiltersArray.includes(m.id))
+                        .map((m) => m.name)
+                        .join(' + ')})`}
+                </strong>
               </span>
               <span className="text-zinc-600">·</span>
               <span className="text-emerald-400 font-bold font-mono">

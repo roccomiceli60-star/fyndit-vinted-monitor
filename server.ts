@@ -1113,10 +1113,10 @@ function matchItemToMonitor(item: VintedItem, mon: any): boolean {
   return true;
 }
 
-// 3. Batch Monitors Real-Time Sync: evaluates all active monitors in 1 single fast request
+// 3. Batch Monitors Real-Time Sync: evaluates active monitors (or combined multi-selected monitors) in 1 single fast request
 app.post('/api/vinted/monitors-sync', async (req, res) => {
   const startTime = Date.now();
-  const { monitors = [], targetMonitorId = 'all' } = req.body || {};
+  const { monitors = [], targetMonitorId = 'all', targetMonitorIds } = req.body || {};
 
   if (!Array.isArray(monitors) || monitors.length === 0) {
     return res.json({ success: true, items: [], total: 0, latencyMs: 1 });
@@ -1125,8 +1125,15 @@ app.post('/api/vinted/monitors-sync', async (req, res) => {
   // Register active monitors in global real-time memory registry for background sniper & SSE push
   registerActiveMonitors(monitors);
 
+  // Multi-monitor selection support: combines 2, 3, 4 or more monitors working simultaneously
+  const allowedIds = Array.isArray(targetMonitorIds) && targetMonitorIds.length > 0 && !targetMonitorIds.includes('all')
+    ? new Set(targetMonitorIds)
+    : targetMonitorId && targetMonitorId !== 'all'
+    ? new Set([targetMonitorId])
+    : null;
+
   const activeMons = monitors.filter(
-    (m: any) => m && m.isActive && (targetMonitorId === 'all' || m.id === targetMonitorId)
+    (m: any) => m && m.isActive && (!allowedIds || allowedIds.has(m.id))
   );
 
   if (activeMons.length === 0) {
