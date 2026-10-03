@@ -46,6 +46,7 @@ export const POPULAR_BRANDS = [
 ];
 
 export const VINTED_COUNTRIES = [
+  { code: 'IT', name: 'Italia', flag: '🇮🇹' },
   { code: 'FR', name: 'Francia', flag: '🇫🇷' },
   { code: 'ES', name: 'Spagna', flag: '🇪🇸' },
   { code: 'PT', name: 'Portogallo', flag: '🇵🇹' },

@@ -1339,7 +1339,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
               </span>
               <span className="text-zinc-600">·</span>
               <span className="px-2 py-0.5 rounded-full bg-blue-950/60 border border-blue-500/30 text-blue-300 font-medium">
-                🇪🇺 8 Nazioni: 🇫🇷 FR · 🇪🇸 ES · 🇵🇹 PT · 🇧🇪 BE · 🇳🇱 NL · 🇱🇺 LU · 🇦🇹 AT · 🇩🇪 DE
+                🇪🇺 9 Nazioni: 🇮🇹 IT · 🇫🇷 FR · 🇪🇸 ES · 🇵🇹 PT · 🇧🇪 BE · 🇳🇱 NL · 🇱🇺 LU · 🇦🇹 AT · 🇩🇪 DE
               </span>
               <span className="text-zinc-600">·</span>
               <span>Ultimo check: <strong className="text-zinc-200 font-mono">{new Date(lastLiveSyncTime || Date.now()).toLocaleTimeString()}</strong></span>

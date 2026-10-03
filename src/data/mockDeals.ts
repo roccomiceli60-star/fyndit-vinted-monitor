@@ -1,6 +1,103 @@
 import { VintedListing, VintedMonitor } from '../types';
 
 export const INITIAL_LISTINGS: VintedListing[] = [
+  // 🇮🇹 Italia (IT)
+  {
+    id: "vnt-10223364100",
+    rawId: 10223364100,
+    title: "Nike Dunk Low Retro Black White Panda",
+    brand: "Nike",
+    category: "Scarpe · Sneakers",
+    size: "42.5",
+    condition: "Nuovo con cartellino",
+    price: 48,
+    originalPrice: 48,
+    originalCurrency: "EUR",
+    originalCurrencySymbol: "€",
+    originalPriceDisplay: "€48.00",
+    marketValue: 115,
+    discountPercent: 58,
+    potentialProfit: 67,
+    resellNotes: "Nike Dunk Panda nuove mai indossate con box originale SNKRS",
+    seller: {
+      username: "marco_milano99",
+      rating: 5.0,
+      reviewCount: 78,
+      country: "Italia",
+      countryFlag: "🇮🇹"
+    },
+    imageUrl: "https://images1.vinted.net/t/05_00859_NHFnV7fyMfkHjNwjCHhhgG/310x430/c369ea78.webp?s=c06eacbddbd9fb2ad96958feb045476284ba8887",
+    vintedUrl: "https://www.vinted.it/items/10223364100-nike-dunk-low-retro-panda",
+    publishedSecondsAgo: 1,
+    dealScore: "STEAL",
+    likesCount: 3,
+    discoveredAt: Date.now() - 1000,
+    isNewDrop: true
+  },
+  {
+    id: "vnt-10223364020",
+    rawId: 10223364020,
+    title: "Giacca Trapstar Hyperdrive Decoded piumino nero",
+    brand: "Trapstar",
+    category: "Uomo · Giubbotti",
+    size: "M",
+    condition: "Ottime condizioni",
+    price: 90,
+    originalPrice: 90,
+    originalCurrency: "EUR",
+    originalCurrencySymbol: "€",
+    originalPriceDisplay: "€90.00",
+    marketValue: 220,
+    discountPercent: 59,
+    potentialProfit: 130,
+    resellNotes: "Piumino Trapstar 100% originale con zip lucida intatta",
+    seller: {
+      username: "alessandro_roma",
+      rating: 4.9,
+      reviewCount: 104,
+      country: "Italia",
+      countryFlag: "🇮🇹"
+    },
+    imageUrl: "https://images1.vinted.net/t/06_00b1c_PgrQbhTW841HpGeTFU6xZN/310x430/cbaa11b9.webp?s=22fa13c1892d85e6cf684cbe19af72897063fb76",
+    vintedUrl: "https://www.vinted.it/items/10223364020-giacca-trapstar-hyperdrive",
+    publishedSecondsAgo: 2,
+    dealScore: "STEAL",
+    likesCount: 2,
+    discoveredAt: Date.now() - 2000,
+    isNewDrop: true
+  },
+  {
+    id: "vnt-10223363910",
+    rawId: 10223363910,
+    title: "Maglione Ralph Lauren trecce lana vergine blu navy",
+    brand: "Ralph Lauren",
+    category: "Uomo · Maglieria",
+    size: "L",
+    condition: "Ottime condizioni",
+    price: 30,
+    originalPrice: 30,
+    originalCurrency: "EUR",
+    originalCurrencySymbol: "€",
+    originalPriceDisplay: "€30.00",
+    marketValue: 95,
+    discountPercent: 68,
+    potentialProfit: 65,
+    resellNotes: "Iconico maglione a trecce con pony ricamato rosso",
+    seller: {
+      username: "matteo_torino",
+      rating: 5.0,
+      reviewCount: 45,
+      country: "Italia",
+      countryFlag: "🇮🇹"
+    },
+    imageUrl: "https://images1.vinted.net/t/02_01db4_9AgWU71wMasUbxQ3k3E3xmB5/310x430/2e628019.webp?s=8a6cabb0286a8c2a8620743748460e96cf64befa",
+    vintedUrl: "https://www.vinted.it/items/10223363910-maglione-ralph-lauren-trecce",
+    publishedSecondsAgo: 3,
+    dealScore: "GOOD",
+    likesCount: 1,
+    discoveredAt: Date.now() - 3000,
+    isNewDrop: true
+  },
   // 🇫🇷 Francia (FR)
   {
     id: "vnt-10223363629",
@@ -563,6 +660,7 @@ export const INITIAL_LISTINGS: VintedListing[] = [
 ];
 
 export const DEFAULT_EU_COUNTRIES = [
+  'IT',
   'FR',
   'ES',
   'PT',

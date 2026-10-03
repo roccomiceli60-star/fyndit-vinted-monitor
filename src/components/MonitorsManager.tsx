@@ -51,6 +51,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
   const [minPrice, setMinPrice] = useState<number>(5);
   const [minCondition, setMinCondition] = useState<ConditionType | 'Tutte'>('Tutte');
   const [selectedCountries, setSelectedCountries] = useState<string[]>([
+    'IT',
     'FR',
     'ES',
     'PT',
@@ -342,7 +343,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
               <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
                 <Globe className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                 <span className="truncate">
-                  {mon.countries && mon.countries.length > 0 && mon.countries.length < 8
+                  {mon.countries && mon.countries.length > 0 && mon.countries.length < 9
                     ? mon.countries
                         .map((c) => {
                           const found = VINTED_COUNTRIES.find(
@@ -351,7 +352,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                           return found ? `${found.flag} ${found.code}` : c;
                         })
                         .join(' · ')
-                    : '🇪🇺 8 Paesi UE (FR, ES, PT, BE, NL, LU, AT, DE)'}
+                    : '🇪🇺 9 Paesi UE (IT, FR, ES, PT, BE, NL, LU, AT, DE)'}
                 </span>
               </div>
             </div>
@@ -685,7 +686,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
-                    Paesi Vinted UE (Solo gli 8 Paesi Ammessi)
+                    Paesi Vinted UE (9 Nazioni Europee)
                   </label>
                   <div className="flex items-center gap-2">
                     <button
@@ -693,7 +694,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                       onClick={() => setSelectedCountries(VINTED_COUNTRIES.map((c) => c.code))}
                       className="text-[11px] font-bold text-teal-400 hover:text-teal-300 underline transition-colors"
                     >
-                      Tutti e 8
+                      Tutti e 9
                     </button>
                     <span className="text-zinc-600 text-xs">|</span>
                     <button
@@ -706,7 +707,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                   </div>
                 </div>
                 <p className="text-[11px] text-zinc-400">
-                  Rileva automaticamente annunci nativi in lingua locale da Francia, Spagna, Portogallo, Belgio, Paesi Bassi, Lussemburgo, Austria e Germania.
+                  Rileva automaticamente annunci in lingua locale da Italia, Francia, Spagna, Portogallo, Belgio, Paesi Bassi, Lussemburgo, Austria e Germania.
                 </p>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {VINTED_COUNTRIES.map((ct) => (

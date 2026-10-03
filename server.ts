@@ -237,10 +237,8 @@ async function refreshVintedSession(force = false): Promise<{ cookie: string; to
 
 // 8 European Nations requested by user:
 // • Francia
-// • Spagna
-// • Portogallo
-// • Belgio
-// 8 European Nations strictly allowed:
+// 9 European Nations strictly allowed:
+// • Italia (IT)
 // • Francia (FR)
 // • Spagna (ES)
 // • Portogallo (PT)
@@ -258,6 +256,7 @@ interface EuMarketplace {
 }
 
 const EU_MARKETPLACES: EuMarketplace[] = [
+  { country: 'Italia', flag: '🇮🇹', domain: 'www.vinted.it', lang: 'it', code: 'IT' },
   { country: 'Francia', flag: '🇫🇷', domain: 'www.vinted.fr', lang: 'fr', code: 'FR' },
   { country: 'Spagna', flag: '🇪🇸', domain: 'www.vinted.es', lang: 'es', code: 'ES' },
   { country: 'Portogallo', flag: '🇵🇹', domain: 'www.vinted.pt', lang: 'pt', code: 'PT' },
@@ -269,6 +268,7 @@ const EU_MARKETPLACES: EuMarketplace[] = [
 ];
 
 const EU_COUNTRY_ALIASES: Record<string, string[]> = {
+  IT: ['it', 'italia', 'italy'],
   FR: ['fr', 'francia', 'france'],
   ES: ['es', 'spagna', 'spain', 'españa'],
   PT: ['pt', 'portogallo', 'portugal'],
@@ -296,13 +296,11 @@ function isAllowedEuropeanCountry(sellerCountry: string): boolean {
   const s = (sellerCountry || '').trim().toLowerCase();
   if (!s) return false;
 
-  // Strict exclusions: UK / Italy / Non-EU
+  // Strict exclusions: UK / Poland / Non-EU (Italia is explicitly ALLOWED)
   if (
     s.includes('regno unito') ||
     s.includes('united kingdom') ||
     s.includes('uk') ||
-    s.includes('italia') ||
-    s.includes('italy') ||
     s.includes('polonia') ||
     s.includes('poland') ||
     s.includes('stati uniti') ||
@@ -410,7 +408,7 @@ async function fetchFromEuMarketplaces(searchText = '', targetCountries?: string
 
   if (Array.isArray(targetCountries) && targetCountries.length > 0) {
     const cleanTargets = targetCountries.map((c) => c.trim().toLowerCase());
-    const isAll = cleanTargets.includes('tutti') || cleanTargets.includes('tutte') || cleanTargets.length >= 8;
+    const isAll = cleanTargets.includes('tutti') || cleanTargets.includes('tutte') || cleanTargets.length >= 9;
     if (!isAll) {
       const filtered = EU_MARKETPLACES.filter((m) =>
         cleanTargets.some((t) => isCountryMatched(t, m.country) || isCountryMatched(t, m.code))
@@ -1103,7 +1101,7 @@ function matchItemToMonitor(item: VintedItem, mon: any): boolean {
   // Check monitor specified countries if configured
   if (Array.isArray(mon.countries) && mon.countries.length > 0) {
     const selectedClean = mon.countries.map((c: string) => c.trim().toLowerCase());
-    const isAll = selectedClean.includes('tutti') || selectedClean.includes('tutte') || selectedClean.length >= 8;
+    const isAll = selectedClean.includes('tutti') || selectedClean.includes('tutte') || selectedClean.length >= 9;
     if (!isAll) {
       const matchCountry = selectedClean.some((target: string) => isCountryMatched(target, sellerCountry));
       if (!matchCountry) {

@@ -1,7 +1,8 @@
 import { VintedListing, VintedMonitor } from '../types';
 
 /**
- * 8 Allowed European Countries strictly requested by user:
+ * 9 Allowed European Countries:
+ * • Italia (IT)
  * • Francia (FR)
  * • Spagna (ES)
  * • Portogallo (PT)
@@ -20,6 +21,13 @@ export interface EuCountryMeta {
 }
 
 export const ALLOWED_EU_COUNTRIES: Record<string, EuCountryMeta> = {
+  IT: {
+    code: 'IT',
+    name: 'Italia',
+    aliases: ['it', 'italia', 'italy'],
+    flag: '🇮🇹',
+    domain: 'www.vinted.it',
+  },
   FR: {
     code: 'FR',
     name: 'Francia',
@@ -97,20 +105,18 @@ export function isCountryMatched(target: string, sellerCountry: string): boolean
 }
 
 /**
- * Validates that seller country belongs to the 8 allowed European countries
- * and strictly excludes UK, Italy, or non-EU countries.
+ * Validates that seller country belongs to the allowed European countries
+ * and strictly excludes UK, Poland, or non-EU countries.
  */
 export function isAllowedEuropeanCountry(sellerCountry: string): boolean {
   const s = (sellerCountry || '').trim().toLowerCase();
   if (!s) return false;
 
-  // Strict exclusions: UK / Italy / Non-EU
+  // Strict exclusions: UK / Poland / Non-EU (Italia is explicitly ALLOWED)
   if (
     s.includes('regno unito') ||
     s.includes('united kingdom') ||
     s.includes('uk') ||
-    s.includes('italia') ||
-    s.includes('italy') ||
     s.includes('polonia') ||
     s.includes('poland') ||
     s.includes('stati uniti') ||
@@ -236,7 +242,7 @@ export function matchListingToMonitor(listing: VintedListing, monitor: VintedMon
   // Check monitor-specified country selection
   if (Array.isArray(monitor.countries) && monitor.countries.length > 0) {
     const cleanTargets = monitor.countries.map((c) => c.trim().toLowerCase());
-    const isAll = cleanTargets.includes('tutti') || cleanTargets.includes('tutte') || cleanTargets.length >= 8;
+    const isAll = cleanTargets.includes('tutti') || cleanTargets.includes('tutte') || cleanTargets.length >= 9;
     if (!isAll) {
       const isMatched = cleanTargets.some((target) => isCountryMatched(target, sellerCountry));
       if (!isMatched) {
