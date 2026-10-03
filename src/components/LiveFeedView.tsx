@@ -33,6 +33,7 @@ import {
   Plus
 } from 'lucide-react';
 import { VintedListing, VintedMonitor } from '../types';
+import { matchListingToMonitor } from '../utils/monitorMatcher';
 import { 
   POPULAR_BRANDS, 
   CLOTHING_SIZES, 
@@ -59,6 +60,7 @@ interface LiveFeedViewProps {
   selectedMonitorFilter?: string;
   onSelectMonitorFilter?: (id: string) => void;
   onGoToMonitorsTab?: () => void;
+  lastLiveSyncTime?: number;
 }
 
 export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
@@ -77,6 +79,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   selectedMonitorFilter = 'all',
   onSelectMonitorFilter,
   onGoToMonitorsTab,
+  lastLiveSyncTime,
 }) => {
   // Grid layout mode: '2' = 2 per row on iPhone/mobile, '1' = 1 per row
   const [gridColumns, setGridColumns] = useState<'1' | '2'>('2');
@@ -283,12 +286,21 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
 
     return listings
       .filter((item) => {
-        // If in monitor filter mode and a specific monitor is selected:
-        if (monitorsMode && !isActivelySearching && selectedMonitorFilter !== 'all') {
-          const targetMon = monitors.find((m) => m.id === selectedMonitorFilter);
-          if (targetMon && item.matchedMonitorName !== targetMon.name) {
-            return false;
+        // Strict Monitor Mode isolation:
+        // Evaluates every item against active monitors using exact keyword/brand isolation
+        if (monitorsMode && !isActivelySearching) {
+          if (selectedMonitorFilter !== 'all') {
+            const targetMon = monitors.find((m) => m.id === selectedMonitorFilter);
+            if (!targetMon || !matchListingToMonitor(item, targetMon)) {
+              return false;
+            }
+          } else {
+            const activeMons = monitors.filter((m) => m.isActive);
+            if (activeMons.length === 0) return false;
+            const matchesAny = activeMons.some((m) => matchListingToMonitor(item, m));
+            if (!matchesAny) return false;
           }
+          return true;
         }
 
         // Under 50€ price filter
@@ -303,11 +315,6 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
         // When actively searching via free-text input, display Vinted search results directly
         // without restricting to previous category or brand selections
         if (isActivelySearching) {
-          return true;
-        }
-
-        // When in monitor-driven mode, items are already vetted by active monitors
-        if (monitorsMode) {
           return true;
         }
 
@@ -1322,6 +1329,27 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
               )}
             </div>
           )}
+
+          {/* Live Stream Pulse Row */}
+          <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-400">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                Aggiornamento Live Attivo (1.0s)
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span>Ultimo check: <strong className="text-zinc-200 font-mono">{new Date(lastLiveSyncTime || Date.now()).toLocaleTimeString()}</strong></span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-400">
+                Filtro: <strong className="text-cyan-400 font-medium">{selectedMonitorFilter === 'all' ? 'Tutti i Monitor' : activeMonitors.find(m => m.id === selectedMonitorFilter)?.name || 'Monitor'}</strong>
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span className="text-emerald-400 font-bold font-mono">
+                {displayedListings.length} drop isolati
+              </span>
+            </div>
+          </div>
         </div>
       )}
 

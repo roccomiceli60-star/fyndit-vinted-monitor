@@ -8,10 +8,12 @@ import { IpaExportView } from './components/IpaExportView';
 import { INITIAL_LISTINGS, INITIAL_MONITORS } from './data/mockDeals';
 import { VintedListing, VintedMonitor } from './types';
 import { playAlertChime } from './services/vintedAutonomousEngine';
+import { matchListingToMonitor } from './utils/monitorMatcher';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
   const [listings, setListings] = useState<VintedListing[]>([]);
+  const [lastLiveSyncTime, setLastLiveSyncTime] = useState<number>(Date.now());
   const [monitors, setMonitors] = useState<VintedMonitor[]>(() => {
     try {
       const saved = localStorage.getItem('fyndit_monitors');
@@ -86,31 +88,19 @@ export default function App() {
     if (!searchQ && isMonMode) {
       const activeMons = monitorsRef.current.filter((m) => m.isActive);
       eligibleItems = [];
+      const currentTargetId = selectedMonitorFilterRef.current;
+      const relevantMons = currentTargetId === 'all'
+        ? activeMons
+        : activeMons.filter((m) => m.id === currentTargetId);
+
       for (const it of newItems) {
-        for (const mon of activeMons) {
-          const monWords = [
-            ...(mon.brands || []),
-            ...(mon.keywords || []),
-            ...(mon.name ? [mon.name] : [])
-          ].map((w) => w.trim().toLowerCase()).filter(Boolean);
-
-          const itText = `${it.title} ${it.brand} ${it.category}`.toLowerCase();
-          const matchPrice = (!mon.maxPrice || mon.maxPrice <= 0 || it.price <= mon.maxPrice) &&
-                             (!mon.minPrice || mon.minPrice <= 0 || it.price >= mon.minPrice);
-
-          const matchWord = monWords.length > 0
-            ? monWords.some((w) => itText.includes(w))
-            : true;
-
-          let matchCat = true;
-          if (mon.category && mon.category !== 'all' && !mon.category.toLowerCase().includes('tutte')) {
-            matchCat = itText.includes(mon.category.toLowerCase());
-          }
-
-          if (matchPrice && matchWord && matchCat) {
-            eligibleItems.push({ ...it, matchedMonitorName: mon.name });
-            break;
-          }
+        const matchingMon = relevantMons.find((m) => matchListingToMonitor(it, m));
+        if (matchingMon) {
+          eligibleItems.push({
+            ...it,
+            matchedMonitorId: matchingMon.id,
+            matchedMonitorName: matchingMon.name,
+          });
         }
       }
     }
@@ -124,6 +114,30 @@ export default function App() {
         .map((i) => ({ ...i, isNewDrop: true }));
 
       if (brandNew.length === 0) return prev;
+
+      // Audio notification on new drops
+      try {
+        playAlertChime();
+      } catch {
+        // audio might require user interaction first
+      }
+
+      // Forward to Discord webhook if configured on the matching monitor
+      const activeMons = monitorsRef.current.filter((m) => m.isActive);
+      for (const item of brandNew) {
+        const matchingMon = activeMons.find((m) => m.name === item.matchedMonitorName);
+        if (matchingMon?.discordWebhookUrl) {
+          fetch('/api/discord-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              webhookUrl: matchingMon.discordWebhookUrl,
+              item,
+              monitorName: matchingMon.name,
+            }),
+          }).catch(() => {});
+        }
+      }
 
       setNewDealsCount((c) => c + brandNew.length);
       return [...brandNew, ...prev].slice(0, 150);
@@ -201,102 +215,88 @@ export default function App() {
       const isMonMode = monitorsModeRef.current;
 
       // 1. MONITOR-DRIVEN MODE:
-      // If user hasn't typed an ad-hoc search, stream strictly from active monitors!
+      // Stream strictly from active monitors using dedicated fast batch sync!
       if (!searchQ && isMonMode) {
         const activeMons = monitorsRef.current.filter((m) => m.isActive);
         if (activeMons.length === 0) {
           setListings([]);
+          setLastLiveSyncTime(Date.now());
           return;
         }
 
-        const targetMons = selectedMonitorFilterRef.current === 'all'
+        const currentTargetId = selectedMonitorFilterRef.current;
+        const targetMons = currentTargetId === 'all'
           ? activeMons
-          : activeMons.filter((m) => m.id === selectedMonitorFilterRef.current);
+          : activeMons.filter((m) => m.id === currentTargetId);
 
-        const fetchPromises = targetMons.map(async (m) => {
-          try {
-            // Intelligent query builder:
-            // 1. If keywords are present, query each keyword (or brand + keyword)
-            // 2. If only brands, query the brand
-            // 3. If neither, query the monitor name!
-            const termsToQuery: string[] = [];
-            const primaryBrand = (m.brands && m.brands.length > 0) ? m.brands[0].trim() : '';
-
-            if (m.keywords && m.keywords.length > 0) {
-              for (const kw of m.keywords.slice(0, 3)) {
-                const cleanKw = kw.trim();
-                if (!cleanKw) continue;
-                if (primaryBrand && !cleanKw.toLowerCase().includes(primaryBrand.toLowerCase())) {
-                  termsToQuery.push(`${primaryBrand} ${cleanKw}`);
-                } else {
-                  termsToQuery.push(cleanKw);
-                }
-              }
-            } else if (primaryBrand) {
-              termsToQuery.push(primaryBrand);
-            } else if (m.name.trim()) {
-              termsToQuery.push(m.name.trim());
-            }
-
-            if (termsToQuery.length === 0) return [];
-
-            const subPromises = termsToQuery.map(async (term) => {
-              try {
-                const monUrl = new URL('/api/vinted/live', window.location.origin);
-                monUrl.searchParams.set('search', term);
-                if (m.maxPrice && m.maxPrice > 0) monUrl.searchParams.set('max_price', String(m.maxPrice));
-                if (m.minPrice && m.minPrice > 0) monUrl.searchParams.set('min_price', String(m.minPrice));
-
-                const r = await fetch(monUrl.toString(), {
-                  headers: { 'Cache-Control': 'no-cache' },
-                  signal: AbortSignal.timeout(4000),
-                });
-                if (!r.ok) return [];
-                const j = await r.json();
-                return (j.items || []).map((it: VintedListing) => ({
-                  ...it,
-                  matchedMonitorName: m.name,
-                }));
-              } catch {
-                return [];
-              }
-            });
-
-            const termResults = await Promise.all(subPromises);
-            return termResults.flat();
-          } catch {
-            return [];
-          }
+        const syncRes = await fetch('/api/vinted/monitors-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            monitors: activeMons,
+            targetMonitorId: currentTargetId,
+          }),
+          signal: AbortSignal.timeout(4500),
         });
 
-        const nestedResults = await Promise.all(fetchPromises);
-        const combined = nestedResults.flat();
+        if (!syncRes.ok) return;
+        const syncData = await syncRes.json();
+        const incomingItems: VintedListing[] = Array.isArray(syncData.items) ? syncData.items : [];
 
-        // Deduplicate and sort strictly newest first
-        const uniqueMap = new Map<string, VintedListing>();
-        for (const item of combined) {
-          if (!uniqueMap.has(item.id)) {
-            uniqueMap.set(item.id, item);
+        // Guarantee strict client-side isolation using matchListingToMonitor
+        const strictlyMatched: VintedListing[] = [];
+        for (const it of incomingItems) {
+          const matchingMon = targetMons.find((m) => matchListingToMonitor(it, m));
+          if (matchingMon) {
+            strictlyMatched.push({
+              ...it,
+              matchedMonitorId: matchingMon.id,
+              matchedMonitorName: matchingMon.name,
+            });
           }
         }
-        const sortedItems = Array.from(uniqueMap.values()).sort(
-          (a, b) => (b.rawId || 0) - (a.rawId || 0)
-        );
 
-        setLatencyMs(1);
+        setLatencyMs(Math.max(1, syncData.latencyMs || 1));
+        setLastLiveSyncTime(Date.now());
+
         setListings((prev) => {
-          if (prev.length === 0) return sortedItems.slice(0, 150);
+          if (prev.length === 0) return strictlyMatched.slice(0, 150);
+
           const prevMap = new Map(prev.map((p) => [p.id, p]));
-          const incomingIds = new Set(sortedItems.map((i) => i.id));
-          const updated = sortedItems.map((incoming) => {
+          const incomingIds = new Set(strictlyMatched.map((i) => i.id));
+
+          const updated = strictlyMatched.map((incoming) => {
             const existing = prevMap.get(incoming.id);
             if (!existing) return { ...incoming, isNewDrop: true };
             return existing.isNewDrop ? { ...incoming, isNewDrop: true } : incoming;
           });
-          const brandNew = updated.filter((it) => it.isNewDrop && !prevMap.has(it.id)).length;
-          if (brandNew > 0) setNewDealsCount((c) => c + brandNew);
+
+          const brandNew = updated.filter((it) => it.isNewDrop && !prevMap.has(it.id));
+          if (brandNew.length > 0) {
+            setNewDealsCount((c) => c + brandNew.length);
+            try { playAlertChime(); } catch {}
+
+            // Forward to Discord webhook if configured on the matching monitor
+            for (const item of brandNew) {
+              const matchingMon = activeMons.find(
+                (m) => m.id === item.matchedMonitorId || m.name === item.matchedMonitorName
+              );
+              if (matchingMon?.discordWebhookUrl) {
+                fetch('/api/discord-webhook', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    webhookUrl: matchingMon.discordWebhookUrl,
+                    item,
+                    monitorName: matchingMon.name,
+                  }),
+                }).catch(() => {});
+              }
+            }
+          }
+
           const retained = prev.filter(
-            (p) => !incomingIds.has(p.id) && targetMons.some((m) => m.name === p.matchedMonitorName)
+            (p) => !incomingIds.has(p.id) && targetMons.some((m) => matchListingToMonitor(p, m))
           );
           return [...updated, ...retained].slice(0, 150);
         });
@@ -459,6 +459,13 @@ export default function App() {
     setMonitors((prev) => [created, ...prev]);
   };
 
+  const handleViewMonitorInFeed = (monId: string) => {
+    setSelectedMonitorFilter(monId);
+    setMonitorsMode(true);
+    setActiveSearch('');
+    setActiveTab('feed');
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       
@@ -539,6 +546,7 @@ export default function App() {
             selectedMonitorFilter={selectedMonitorFilter}
             onSelectMonitorFilter={(id) => setSelectedMonitorFilter(id)}
             onGoToMonitorsTab={() => setActiveTab('monitors')}
+            lastLiveSyncTime={lastLiveSyncTime}
           />
         )}
 
@@ -548,6 +556,7 @@ export default function App() {
             onToggleMonitor={handleToggleMonitor}
             onDeleteMonitor={handleDeleteMonitor}
             onAddMonitor={handleAddMonitor}
+            onViewInFeed={handleViewMonitorInFeed}
           />
         )}
 

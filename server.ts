@@ -761,6 +761,184 @@ app.get('/api/vinted/live', async (req, res) => {
   });
 });
 
+// Strict matcher ensuring search is 100% isolated to monitor parameters
+function matchItemToMonitor(item: VintedItem, mon: any): boolean {
+  if (!mon.isActive) return false;
+
+  const titleLower = (item.title || '').toLowerCase();
+  const brandLower = (item.brand || '').toLowerCase();
+  const catLower = (item.category || '').toLowerCase();
+  const fullText = `${titleLower} ${brandLower} ${catLower}`;
+
+  // 1. Excluded keywords: strict immediate discard
+  if (Array.isArray(mon.excludedKeywords) && mon.excludedKeywords.length > 0) {
+    for (const ex of mon.excludedKeywords) {
+      const cleanEx = ex.trim().toLowerCase();
+      if (!cleanEx) continue;
+      if (fullText.includes(cleanEx)) return false;
+    }
+  }
+
+  // 2. Price bounds
+  if (mon.minPrice && mon.minPrice > 0 && item.price < mon.minPrice) return false;
+  if (mon.maxPrice && mon.maxPrice > 0 && item.price > mon.maxPrice) return false;
+
+  // 3. Keywords isolation: strict check
+  const hasKeywords = Array.isArray(mon.keywords) && mon.keywords.some((k: string) => k && k.trim().length > 0);
+  if (hasKeywords) {
+    const validKeywords = mon.keywords.map((k: string) => k.trim().toLowerCase()).filter(Boolean);
+    const matchesAny = validKeywords.some((kw: string) => {
+      const subWords = kw.split(/\s+/).filter(Boolean);
+      if (subWords.length > 1) {
+        return subWords.every((sw: string) => fullText.includes(sw));
+      }
+      return fullText.includes(kw);
+    });
+    if (!matchesAny) return false;
+  }
+
+  // 4. Brands isolation: strict check
+  const hasBrands = Array.isArray(mon.brands) && mon.brands.length > 0;
+  if (hasBrands) {
+    const matchesAnyBrand = mon.brands.some((b: string) => {
+      const bLower = b.trim().toLowerCase();
+      if (!bLower) return false;
+      return brandLower.includes(bLower) || titleLower.includes(bLower);
+    });
+    if (!matchesAnyBrand) return false;
+  }
+
+  // 5. If neither keywords nor brands were specified, fallback to non-generic name words
+  if (!hasKeywords && !hasBrands) {
+    const nameClean = (mon.name || '').trim().toLowerCase();
+    if (nameClean && !nameClean.startsWith('monitor') && !nameClean.startsWith('nuovo')) {
+      const nameWords = nameClean.split(/\s+/).filter((w: string) => w.length > 2);
+      if (nameWords.length > 0) {
+        const matchesName = nameWords.some((nw: string) => fullText.includes(nw));
+        if (!matchesName) return false;
+      }
+    }
+  }
+
+  // 6. Category filter
+  if (mon.category && mon.category !== 'all' && !mon.category.toLowerCase().includes('tutte')) {
+    const monCatLower = mon.category.toLowerCase();
+    const matchesCat = catLower.includes(monCatLower) || titleLower.includes(monCatLower);
+    if (!matchesCat && Array.isArray(mon.subcategories) && mon.subcategories.length > 0) {
+      const matchSub = mon.subcategories.some((sub: string) => fullText.includes(sub.toLowerCase()));
+      if (!matchSub) return false;
+    } else if (!matchesCat) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// 3. Batch Monitors Real-Time Sync: evaluates all active monitors in 1 single fast request
+app.post('/api/vinted/monitors-sync', async (req, res) => {
+  const startTime = Date.now();
+  const { monitors = [], targetMonitorId = 'all' } = req.body || {};
+
+  if (!Array.isArray(monitors) || monitors.length === 0) {
+    return res.json({ success: true, items: [], total: 0, latencyMs: 1 });
+  }
+
+  const activeMons = monitors.filter(
+    (m: any) => m && m.isActive && (targetMonitorId === 'all' || m.id === targetMonitorId)
+  );
+
+  if (activeMons.length === 0) {
+    return res.json({ success: true, items: [], total: 0, latencyMs: 1 });
+  }
+
+  // Collect unique search terms across all active monitors
+  const queryToMonitors = new Map<string, any[]>();
+  for (const mon of activeMons) {
+    const primaryBrand = (mon.brands && mon.brands.length > 0) ? mon.brands[0].trim() : '';
+    const terms: string[] = [];
+
+    if (mon.keywords && mon.keywords.length > 0) {
+      for (const kw of mon.keywords.slice(0, 4)) {
+        const cleanKw = kw.trim();
+        if (!cleanKw) continue;
+        terms.push(cleanKw);
+      }
+    } else if (primaryBrand) {
+      terms.push(primaryBrand);
+    } else if (mon.name && mon.name.trim()) {
+      terms.push(mon.name.trim());
+    }
+
+    for (const t of terms) {
+      const cleanTerm = t.toLowerCase();
+      touchActiveSearch(cleanTerm);
+      if (!queryToMonitors.has(cleanTerm)) {
+        queryToMonitors.set(cleanTerm, []);
+      }
+      queryToMonitors.get(cleanTerm)!.push(mon);
+    }
+  }
+
+  // Fetch queries in parallel with short server cache (1500ms)
+  const queryPromises = Array.from(queryToMonitors.keys()).map(async (query) => {
+    const cached = queryResultsCache.get(query);
+    const now = Date.now();
+    if (cached && now - cached.timestamp < 1500) {
+      return cached.items;
+    }
+    try {
+      const raw = await fetchFromVinted(query);
+      const transformed = raw.map((it: any) => (it.id && it.dealScore ? it : transformVintedItem(it)));
+      for (const it of transformed) {
+        if (!seenItemIds.has(it.id)) {
+          seenItemIds.add(it.id);
+          realItemsCache.unshift(it);
+        }
+      }
+      queryResultsCache.set(query, { items: transformed, timestamp: Date.now() });
+      return transformed;
+    } catch {
+      return cached?.items || [];
+    }
+  });
+
+  const queryResults = await Promise.all(queryPromises);
+  const candidateItems = queryResults.flat();
+
+  // Test every candidate item against active monitors using STRICT isolated matching
+  const matchedMap = new Map<string, any>();
+
+  for (const item of candidateItems) {
+    for (const mon of activeMons) {
+      if (matchItemToMonitor(item, mon)) {
+        const existing = matchedMap.get(item.id);
+        if (!existing) {
+          matchedMap.set(item.id, {
+            ...item,
+            matchedMonitorId: mon.id,
+            matchedMonitorName: mon.name,
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  const finalMatched = Array.from(matchedMap.values());
+  // Sort strictly by newest first (highest rawId first)
+  finalMatched.sort((a, b) => b.rawId - a.rawId);
+
+  const latencyMs = Date.now() - startTime;
+  res.json({
+    success: true,
+    items: finalMatched,
+    total: finalMatched.length,
+    timestamp: Date.now(),
+    latencyMs,
+  });
+});
+
 // Fast In-Memory Image Cache (serves images in < 2ms without CDN blocking)
 const imageMemoryCache = new Map<string, { buffer: Buffer; contentType: string; expireAt: number }>();
 const NEUTRAL_PLACEHOLDER_SVG = Buffer.from(
@@ -817,6 +995,106 @@ app.get('/api/image-proxy', async (req, res) => {
   } catch {
     res.setHeader('Content-Type', 'image/svg+xml');
     res.send(NEUTRAL_PLACEHOLDER_SVG);
+  }
+});
+
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    totalCached: realItemsCache.length,
+    activeStreamListeners: sseSubscribers.size,
+    sessionActive: Boolean(sessionCookieHeader && sessionAccessToken),
+  });
+});
+
+app.post('/api/test-webhook', async (req, res) => {
+  try {
+    const { webhookUrl } = req.body || {};
+    if (!webhookUrl || typeof webhookUrl !== 'string' || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+      return res.status(400).json({ success: false, error: 'URL Webhook Discord non valido (deve iniziare con https://discord.com/api/webhooks/)' });
+    }
+    const testPayload = {
+      username: 'Fyndit Vinted Sniper',
+      avatar_url: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=128&q=80',
+      embeds: [
+        {
+          title: '🎯 Test Notifica Webhook Fyndit!',
+          description: 'Il tuo Webhook Discord è configurato e funzionante al 100%! Riceverai qui tutti i drop in tempo reale con foto, prezzo e link diretto su Vinted.',
+          color: 0x09b1ba,
+          fields: [
+            { name: 'Velocità Alert', value: '⚡ < 0.2s', inline: true },
+            { name: 'Stato Monitor', value: '✅ Attivo', inline: true },
+          ],
+          footer: { text: 'Fyndit Pro Sniper • Vinted EU' },
+          timestamp: new Date().toISOString(),
+        }
+      ]
+    };
+
+    const resp = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(testPayload),
+    });
+
+    if (resp.ok || resp.status === 204) {
+      return res.json({ success: true, message: 'Notifica di test inviata con successo su Discord!' });
+    } else {
+      const errText = await resp.text().catch(() => '');
+      return res.status(resp.status).json({ success: false, error: `Discord ha risposto con codice ${resp.status}: ${errText}` });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Errore invio webhook' });
+  }
+});
+
+app.post('/api/discord-webhook', async (req, res) => {
+  try {
+    const { webhookUrl, item, monitorName } = req.body || {};
+    if (!webhookUrl || typeof webhookUrl !== 'string' || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+      return res.status(400).json({ success: false, error: 'URL Webhook Discord non valido' });
+    }
+    if (!item) {
+      return res.status(400).json({ success: false, error: 'Dati articolo mancanti' });
+    }
+
+    const payload = {
+      username: 'Fyndit Vinted Sniper',
+      avatar_url: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=128&q=80',
+      embeds: [
+        {
+          title: `🎯 ${item.title || 'Nuovo Affare Rilevato'}`,
+          url: item.vintedUrl || `https://www.vinted.it/items/${item.rawId || ''}`,
+          color: (item.dealScore || 80) >= 90 ? 0x10b981 : 0x09b1ba,
+          thumbnail: item.imageUrl ? { url: item.imageUrl } : undefined,
+          fields: [
+            { name: '💰 Prezzo', value: `€${item.price?.toFixed(2)}`, inline: true },
+            { name: '🏷️ Brand', value: item.brand || 'Non specificato', inline: true },
+            { name: '📦 Condizione', value: item.condition || 'Ottima', inline: true },
+            { name: '🎯 Monitor', value: monitorName || 'Sniper Bot', inline: true },
+            { name: '🌍 Venditore', value: `${item.sellerFlag || '🇮🇹'} ${item.sellerCountry || 'Italia'}`, inline: true },
+            { name: '📈 Deal Score', value: `${item.dealScore || 85}/100 🔥`, inline: true },
+          ],
+          footer: { text: 'Fyndit • Clicca sul titolo per aprire e comprare su Vinted!' },
+          timestamp: new Date().toISOString(),
+        }
+      ]
+    };
+
+    const resp = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (resp.ok || resp.status === 204) {
+      return res.json({ success: true });
+    } else {
+      return res.status(resp.status).json({ success: false, error: `Discord status ${resp.status}` });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

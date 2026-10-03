@@ -13,7 +13,8 @@ import {
   Home, 
   Cat, 
   Tag, 
-  Globe 
+  Globe,
+  Send 
 } from 'lucide-react';
 import { VintedMonitor, ConditionType } from '../types';
 import { VINTED_CATEGORIES } from '../data/vintedCategories';
@@ -24,6 +25,7 @@ interface MonitorsManagerProps {
   onToggleMonitor: (id: string) => void;
   onDeleteMonitor: (id: string) => void;
   onAddMonitor: (monitor: Omit<VintedMonitor, 'id' | 'createdAt' | 'matchCount'>) => void;
+  onViewInFeed?: (monitorId: string) => void;
 }
 
 export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
@@ -31,6 +33,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
   onToggleMonitor,
   onDeleteMonitor,
   onAddMonitor,
+  onViewInFeed,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('all');
@@ -334,14 +337,26 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
             </div>
 
             {/* Bottom bar with status and delete */}
-            <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Scansione attiva (0.2s)
-              </span>
+            <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs gap-2">
+              {onViewInFeed ? (
+                <button
+                  type="button"
+                  onClick={() => onViewInFeed(mon.id)}
+                  className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-[11px] font-bold flex items-center gap-1 transition-all"
+                  title="Filtra il feed Live Deals con questo monitor"
+                >
+                  <Target className="w-3 h-3 text-teal-400" />
+                  <span>Vedi Drop nel Feed</span>
+                </button>
+              ) : (
+                <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  Scansione attiva (1.0s)
+                </span>
+              )}
               <button
                 onClick={() => onDeleteMonitor(mon.id)}
-                className="text-zinc-500 hover:text-red-400 p-1 transition-colors"
+                className="text-zinc-500 hover:text-red-400 p-1 transition-colors ml-auto"
                 title="Elimina Monitor"
               >
                 <Trash2 className="w-4 h-4" />
@@ -667,6 +682,54 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                       <span>{ct.name}</span>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Step 7: Webhook Discord per Notifiche Push Istantanee */}
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-indigo-950/20 border border-indigo-500/30">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Send className="w-3.5 h-3.5 text-indigo-400" />
+                    Notifiche Push Discord (Opzionale)
+                  </label>
+                  <span className="text-[10px] text-indigo-400 font-semibold">&lt; 0.2s alert</span>
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  Incolla l'URL del Webhook del tuo server Discord per ricevere foto, prezzo e link diretto sul telefono.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://discord.com/api/webhooks/..."
+                    value={discordWebhookUrl}
+                    onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-400 font-mono"
+                  />
+                  {discordWebhookUrl.trim() && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/test-webhook', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ webhookUrl: discordWebhookUrl.trim() }),
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            alert('✅ Notifica di test inviata con successo sul tuo canale Discord!');
+                          } else {
+                            alert(`❌ Errore Webhook: ${data.error || 'URL non valido'}`);
+                          }
+                        } catch (err: any) {
+                          alert(`❌ Errore di rete: ${err.message}`);
+                        }
+                      }}
+                      className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs whitespace-nowrap transition-all"
+                    >
+                      Invia Test
+                    </button>
+                  )}
                 </div>
               </div>
 

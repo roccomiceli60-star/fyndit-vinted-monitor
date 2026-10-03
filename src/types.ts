@@ -39,6 +39,7 @@ export interface VintedListing {
   potentialProfit?: number;
   resellNotes?: string;
   matchedMonitorName?: string;
+  matchedMonitorId?: string;
 }
 
 export interface VintedMonitor {
