@@ -154,6 +154,7 @@ export default function App() {
         const streamUrl = new URL('/api/vinted/stream', window.location.origin);
         if (activeSearch.trim()) streamUrl.searchParams.set('search', activeSearch.trim());
         if (activeBrand && activeBrand !== 'Tutti') streamUrl.searchParams.set('brand', activeBrand);
+        if (monitorsMode && !activeSearch.trim()) streamUrl.searchParams.set('monitors_mode', '1');
 
         eventSource = new EventSource(streamUrl.toString());
 
@@ -202,7 +203,7 @@ export default function App() {
       if (eventSource) eventSource.close();
       if (sseTimeout) clearTimeout(sseTimeout);
     };
-  }, [handleIncomingDrops, activeSearch, activeBrand]);
+  }, [handleIncomingDrops, activeSearch, activeBrand, monitorsMode]);
 
   // Active real-time drop poller for standalone iOS & live feed with continuous autorefresh
   const fetchLiveRealtimeDrops = useCallback(async (manual = false) => {
@@ -372,10 +373,10 @@ export default function App() {
     // Immediate fetch
     fetchLiveRealtimeDrops(false);
 
-    // Turbo Sniper: 100% Real-Time smooth sub-second pulse interval (1200ms)
+    // Turbo Sniper: 100% Real-Time ultra-low latency pulse interval (600ms)
     const interval = setInterval(() => {
       fetchLiveRealtimeDrops(false);
-    }, 1200);
+    }, 600);
 
     return () => clearInterval(interval);
   }, [turboSniper, fetchLiveRealtimeDrops]);

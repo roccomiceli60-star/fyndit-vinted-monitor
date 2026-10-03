@@ -56,20 +56,71 @@ let sessionAccessToken = '';
 let lastCookieFetch = 0;
 let highestSeenRawId = 0;
 
-// Set of active Server-Sent Events subscribers for instant push (supports search subscriptions)
+// Set of active Server-Sent Events subscribers for instant push (supports search subscriptions & monitor streams)
 interface SseSubscriber {
   res: Response;
   search: string;
   brand: string;
+  isMonitorsMode?: boolean;
 }
 const sseSubscribers = new Set<SseSubscriber>();
+
+// Global in-memory registry of active monitors across all connected users
+const activeRegisteredMonitors = new Map<string, any>();
+
+export function registerActiveMonitors(monitors: any[]) {
+  if (!Array.isArray(monitors)) return;
+  for (const mon of monitors) {
+    if (mon && mon.id && mon.isActive) {
+      activeRegisteredMonitors.set(mon.id, mon);
+      if (Array.isArray(mon.keywords)) {
+        for (const kw of mon.keywords) {
+          if (kw && kw.trim()) touchActiveSearch(kw.trim().toLowerCase());
+        }
+      }
+      if (Array.isArray(mon.brands) && mon.brands.length > 0) {
+        for (const b of mon.brands) {
+          if (b && b.trim()) touchActiveSearch(b.trim().toLowerCase());
+        }
+      }
+    } else if (mon && mon.id && !mon.isActive) {
+      activeRegisteredMonitors.delete(mon.id);
+    }
+  }
+}
 
 function broadcastNewItems(newItems: VintedItem[], originQuery = '') {
   if (newItems.length === 0 || sseSubscribers.size === 0) return;
 
   for (const sub of sseSubscribers) {
     try {
-      if (sub.search || (sub.brand && sub.brand !== 'tutti')) {
+      if (sub.isMonitorsMode) {
+        // Stream strictly drops that match active monitors
+        const activeMons = Array.from(activeRegisteredMonitors.values());
+        if (activeMons.length === 0) continue;
+
+        const matchedDrops: VintedItem[] = [];
+        for (const item of newItems) {
+          const match = activeMons.find((m) => matchItemToMonitor(item, m));
+          if (match) {
+            matchedDrops.push({
+              ...item,
+              matchedMonitorId: match.id,
+              matchedMonitorName: match.name,
+            });
+          }
+        }
+
+        if (matchedDrops.length > 0) {
+          const payload = JSON.stringify({
+            type: 'NEW_DROPS',
+            timestamp: Date.now(),
+            count: matchedDrops.length,
+            items: matchedDrops,
+          });
+          sub.res.write(`data: ${payload}\n\n`);
+        }
+      } else if (sub.search || (sub.brand && sub.brand !== 'tutti')) {
         const qWords = sub.search.split(/\s+/).filter(Boolean);
         const matches = newItems.filter((item) => {
           if (originQuery && originQuery.toLowerCase() === sub.search.toLowerCase()) return true;
@@ -401,9 +452,13 @@ async function fetchFromVintedSingle(searchText = '', retryCount = 0): Promise<a
 }
 
 // Fetch items from Vinted API with real-time bilingual expansion strictly ordered by newest_first
-async function fetchFromVinted(searchText = '', retryCount = 0): Promise<any[]> {
-  const queryVariants = expandSearchTerms(searchText);
+async function fetchFromVinted(searchText = '', retryCount = 0, exactOnly = false): Promise<any[]> {
+  const clean = searchText.trim();
+  if (exactOnly || !clean) {
+    return fetchFromVintedSingle(clean, retryCount);
+  }
 
+  const queryVariants = expandSearchTerms(clean);
   if (queryVariants.length === 1 && !queryVariants[0]) {
     return fetchFromVintedSingle('', retryCount);
   }
@@ -572,12 +627,12 @@ function ingestRawItems(items: any[]): VintedItem[] {
 async function runGeneralWorker(workerId = 1) {
   while (true) {
     try {
-      const raw = await fetchFromVinted('');
+      const raw = await fetchFromVinted('', 0, true);
       ingestRawItems(raw);
     } catch {
       // transient error, retry
     }
-    await new Promise((r) => setTimeout(r, 900));
+    await new Promise((r) => setTimeout(r, 650));
   }
 }
 
@@ -593,10 +648,31 @@ export function touchActiveSearch(q: string) {
 async function runActiveSearchSniperWorker() {
   while (true) {
     const activeQueries = new Set<string>();
+
+    // 1. Gather queries from active monitors in registry
+    for (const mon of activeRegisteredMonitors.values()) {
+      if (Array.isArray(mon.keywords)) {
+        for (const kw of mon.keywords) {
+          if (kw && kw.trim()) activeQueries.add(kw.trim().toLowerCase());
+        }
+      }
+      if (Array.isArray(mon.brands) && mon.brands.length > 0) {
+        for (const b of mon.brands) {
+          if (b && b.trim()) activeQueries.add(b.trim().toLowerCase());
+        }
+      }
+      if ((!mon.keywords || mon.keywords.length === 0) && (!mon.brands || mon.brands.length === 0) && mon.name) {
+        activeQueries.add(mon.name.trim().toLowerCase());
+      }
+    }
+
+    // 2. Gather queries from active SSE subscribers
     for (const sub of sseSubscribers) {
       const q = sub.search || (sub.brand !== 'tutti' ? sub.brand : '');
       if (q) activeQueries.add(q.toLowerCase());
     }
+
+    // 3. Gather active touched queries
     const now = Date.now();
     for (const [q, time] of activeClientSearchQueries.entries()) {
       if (now - time < 3 * 60 * 1000) {
@@ -607,10 +683,11 @@ async function runActiveSearchSniperWorker() {
     }
 
     if (activeQueries.size > 0) {
-      for (const q of activeQueries) {
+      const queryList = Array.from(activeQueries);
+      for (const q of queryList) {
         try {
-          const raw = await fetchFromVinted(q);
-          const transformed = raw.map(transformVintedItem);
+          const raw = await fetchFromVinted(q, 0, true);
+          const transformed = raw.map((it: any) => (it.id && it.dealScore ? it : transformVintedItem(it)));
           const brandNew: VintedItem[] = [];
           for (const it of transformed) {
             if (!seenItemIds.has(it.id)) {
@@ -619,30 +696,34 @@ async function runActiveSearchSniperWorker() {
             }
           }
           if (brandNew.length > 0) {
-            realItemsCache = [...brandNew, ...realItemsCache].slice(0, 150);
+            realItemsCache = [...brandNew, ...realItemsCache].slice(0, 200);
             broadcastNewItems(brandNew, q);
           }
+          queryResultsCache.set(q, { items: transformed, timestamp: Date.now() });
         } catch {
-          // ignore
+          // ignore transient
         }
-        await new Promise((r) => setTimeout(r, 450));
+        // Tight 100ms staggering to stay well below rate limit while keeping detection latency sub-second
+        await new Promise((r) => setTimeout(r, 100));
       }
     } else {
-      await new Promise((r) => setTimeout(r, 650));
+      await new Promise((r) => setTimeout(r, 350));
     }
   }
 }
 
-// Start two interleaved general workers (staggered by 450ms) + active search sniper
+// Start three interleaved high-speed general workers (staggered by 220ms) + active sniper
 runGeneralWorker(1);
-setTimeout(() => runGeneralWorker(2), 450);
-setTimeout(runActiveSearchSniperWorker, 600);
+setTimeout(() => runGeneralWorker(2), 220);
+setTimeout(() => runGeneralWorker(3), 440);
+setTimeout(runActiveSearchSniperWorker, 500);
 
 // API Routes
-// 1. SSE Stream: Pushes new items the millisecond they are detected (with query subscription)
+// 1. SSE Stream: Pushes new items the exact millisecond they are detected
 app.get('/api/vinted/stream', (req, res) => {
   const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
   const brand = typeof req.query.brand === 'string' ? req.query.brand.trim().toLowerCase() : '';
+  const isMonitorsMode = req.query.monitors_mode === '1';
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -651,7 +732,7 @@ app.get('/api/vinted/stream', (req, res) => {
     'Access-Control-Allow-Origin': '*',
   });
 
-  const subscriber: SseSubscriber = { res, search, brand };
+  const subscriber: SseSubscriber = { res, search, brand, isMonitorsMode };
   sseSubscribers.add(subscriber);
 
   if (search || (brand && brand !== 'tutti')) {
@@ -666,7 +747,7 @@ app.get('/api/vinted/stream', (req, res) => {
       clearInterval(pingInterval);
       sseSubscribers.delete(subscriber);
     }
-  }, 8000);
+  }, 6000);
 
   req.on('close', () => {
     clearInterval(pingInterval);
@@ -844,6 +925,9 @@ app.post('/api/vinted/monitors-sync', async (req, res) => {
     return res.json({ success: true, items: [], total: 0, latencyMs: 1 });
   }
 
+  // Register active monitors in global real-time memory registry for background sniper & SSE push
+  registerActiveMonitors(monitors);
+
   const activeMons = monitors.filter(
     (m: any) => m && m.isActive && (targetMonitorId === 'all' || m.id === targetMonitorId)
   );
@@ -880,21 +964,26 @@ app.post('/api/vinted/monitors-sync', async (req, res) => {
     }
   }
 
-  // Fetch queries in parallel with short server cache (1500ms)
+  // Fetch queries in parallel with ultra-fast memory cache (500ms) and exact single-fetch (no extra variant delay)
   const queryPromises = Array.from(queryToMonitors.keys()).map(async (query) => {
     const cached = queryResultsCache.get(query);
     const now = Date.now();
-    if (cached && now - cached.timestamp < 1500) {
+    if (cached && now - cached.timestamp < 500) {
       return cached.items;
     }
     try {
-      const raw = await fetchFromVinted(query);
+      const raw = await fetchFromVinted(query, 0, true);
       const transformed = raw.map((it: any) => (it.id && it.dealScore ? it : transformVintedItem(it)));
+      const brandNew: VintedItem[] = [];
       for (const it of transformed) {
         if (!seenItemIds.has(it.id)) {
           seenItemIds.add(it.id);
           realItemsCache.unshift(it);
+          brandNew.push(it);
         }
+      }
+      if (brandNew.length > 0) {
+        broadcastNewItems(brandNew, query);
       }
       queryResultsCache.set(query, { items: transformed, timestamp: Date.now() });
       return transformed;

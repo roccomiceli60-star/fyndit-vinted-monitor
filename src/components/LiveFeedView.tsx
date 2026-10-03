@@ -1335,7 +1335,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Aggiornamento Live Attivo (1.0s)
+                Streaming Real-Time Istantaneo (SSE + 0.6s Pulse)
               </span>
               <span className="text-zinc-600">·</span>
               <span>Ultimo check: <strong className="text-zinc-200 font-mono">{new Date(lastLiveSyncTime || Date.now()).toLocaleTimeString()}</strong></span>
