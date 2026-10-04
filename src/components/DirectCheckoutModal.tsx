@@ -13,7 +13,8 @@ import {
   Sparkles,
   ChevronRight,
   Copy,
-  Check
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import { VintedListing, VintedPickupPoint, VintedAccount, VintedOrder } from '../types';
 import { calculateVintedCheckoutBreakdown } from '../data/pickupPoints';
@@ -136,6 +137,19 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
     setPurchaseStep('REVIEW');
     setConfirmedOrder(null);
     onClose();
+  };
+
+  const handleOpenOfficialVintedCheckout = () => {
+    if (!item) return;
+    const lockerInfo = `${pickupPoint.carrier} - ${pickupPoint.name}, ${pickupPoint.address} (${pickupPoint.code || ''})`;
+    navigator.clipboard.writeText(lockerInfo).catch(() => {});
+
+    const rawId = item.rawId || item.id.replace(/[^0-9]/g, '');
+    const checkoutUrl = rawId
+      ? `https://www.vinted.it/transaction/buy/new?item_id=${rawId}&shipping_type=pickup`
+      : item.vintedUrl;
+
+    window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -312,18 +326,29 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
                 </div>
               </div>
 
-              {/* Confirm Button */}
-              <div className="pt-1">
+              {/* Dual Action: In-App Buy & Direct Vinted Buy with Pre-selected Locker */}
+              <div className="pt-1 space-y-2">
                 <button
                   type="button"
                   onClick={handleConfirmPurchase}
                   className="w-full py-3 rounded-full bg-[#09B1BA] hover:bg-teal-400 text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xl shadow-teal-500/25 active:scale-95 cursor-pointer"
                 >
                   <Zap className="w-4 h-4 fill-zinc-950" />
-                  <span>CONFERMA E COMPRA SUBITO (€{fees.total.toFixed(2)})</span>
+                  <span>CONFERMA E COMPRA ORA IN-APP (€{fees.total.toFixed(2)})</span>
                 </button>
-                <p className="text-[10px] text-center text-zinc-400 mt-2">
-                  🔒 Acquisto protetto da Garanzia Vinted. Consegna tracciata al punto di ritiro.
+
+                <button
+                  type="button"
+                  onClick={handleOpenOfficialVintedCheckout}
+                  className="w-full py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-zinc-700/80 cursor-pointer"
+                  title="Apre la cassa ufficiale di Vinted con questo punto di ritiro già preimpostato"
+                >
+                  <span>⚡ Apri Checkout Ufficiale Vinted (con questo Locker)</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-teal-400" />
+                </button>
+
+                <p className="text-[10px] text-center text-zinc-400">
+                  📍 Consegna preimpostata su: <strong className="text-teal-300">{pickupPoint?.name} ({pickupPoint?.distanceMeters}m da casa)</strong>
                 </p>
               </div>
 
