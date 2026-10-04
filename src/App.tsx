@@ -9,7 +9,6 @@ import { VintedAccountModal } from './components/VintedAccountModal';
 import { PickupPointSelectorModal } from './components/PickupPointSelectorModal';
 import { DirectCheckoutModal } from './components/DirectCheckoutModal';
 import { OrdersDashboardView } from './components/OrdersDashboardView';
-import { QuickBuyNotificationBanner } from './components/QuickBuyNotificationBanner';
 import { INITIAL_LISTINGS, INITIAL_MONITORS } from './data/mockDeals';
 import { VintedListing, VintedMonitor, VintedAccount, VintedPickupPoint, VintedOrder } from './types';
 import { DEFAULT_VINTED_ACCOUNT, SAMPLE_PICKUP_POINTS_MILAN } from './data/pickupPoints';
@@ -67,7 +66,6 @@ export default function App() {
   const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
   const [showPickupModal, setShowPickupModal] = useState<boolean>(false);
   const [checkoutItem, setCheckoutItem] = useState<VintedListing | null>(null);
-  const [quickBuyAlertItem, setQuickBuyAlertItem] = useState<VintedListing | null>(null);
   const [orders, setOrders] = useState<VintedOrder[]>(() => {
     try {
       const saved = localStorage.getItem('fyndit_orders');
@@ -211,23 +209,13 @@ export default function App() {
         };
       });
 
-      // Find top priority match for immediate push & banner
-      const topMatch = [...scoredBrandNew].sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0))[0];
-
-      if (topMatch && (topMatch.matchScore || 0) >= 65) {
-        setQuickBuyAlertItem(topMatch);
+      // Play audio notification if sound is enabled
+      try {
         if (vintedAccount.soundEnabled !== false) {
-          playQuickBuyNotificationChime();
+          playAlertChime();
         }
-        triggerSystemPushNotification(topMatch, topMatch.matchScore || 96);
-      } else {
-        try {
-          if (vintedAccount.soundEnabled !== false) {
-            playAlertChime();
-          }
-        } catch {
-          // audio might require user interaction first
-        }
+      } catch {
+        // audio might require user interaction first
       }
 
       // Forward to Discord webhook if configured on the matching monitor
@@ -653,14 +641,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       
-      {/* Instant Push Alert Banner */}
-      <QuickBuyNotificationBanner
-        item={quickBuyAlertItem}
-        pickupPoint={selectedPickupPoint}
-        onBuyNow={(item) => handleDirectBuyItem(item)}
-        onDismiss={() => setQuickBuyAlertItem(null)}
-      />
-
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-cyan-500 text-zinc-950 font-bold shadow-2xl flex items-center gap-2 animate-bounce">
