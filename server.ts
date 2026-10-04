@@ -1404,6 +1404,167 @@ app.post('/api/discord-webhook', async (req, res) => {
   }
 });
 
+// ----------------------------------------------------
+// VINTED DIRECT IN-APP BUY & PICKUP POINTS API
+// ----------------------------------------------------
+
+// 1. Get Pickup points near user's address/city/CAP
+app.get('/api/vinted/pickup-points', (req, res) => {
+  const query = (req.query.address as string || req.query.city as string || req.query.postalCode as string || '').trim();
+  const country = (req.query.country as string || 'Italia').trim();
+  const city = query || 'Milano';
+
+  const samplePoints = [
+    {
+      id: 'inp-loc-01',
+      carrier: 'InPost Locker 24/7',
+      name: `Locker InPost 24/7 - ${city} Centro`,
+      address: query ? `${query} 14` : 'Via Dante 14',
+      city: query || 'Milano',
+      postalCode: '20121',
+      country,
+      distanceMeters: 130,
+      openingHours: 'Aperto 24 ore su 24 · Ritiro PIN/QR Code',
+      isLocker247: true,
+      shippingFee: 2.89,
+      code: 'INP-IT-1082',
+    },
+    {
+      id: 'pos-loc-02',
+      carrier: 'PuntoPoste (Poste Italiane)',
+      name: `PuntoPoste Tabaccheria & Servizi - ${city}`,
+      address: query ? `Corso Principale 38, ${city}` : 'Corso Buenos Aires 38',
+      city: query || 'Milano',
+      postalCode: '20124',
+      country,
+      distanceMeters: 280,
+      openingHours: 'Lun - Sab: 07:30 - 20:00',
+      isLocker247: false,
+      shippingFee: 3.19,
+      code: 'POS-IT-5541',
+    },
+    {
+      id: 'brt-loc-03',
+      carrier: 'BRT Fermopoint',
+      name: `BRT Fermopoint Edicola & Cartoleria - ${city}`,
+      address: query ? `Piazza Centrale 9, ${city}` : 'Piazza Repubblica 9',
+      city: query || 'Milano',
+      postalCode: '20124',
+      country,
+      distanceMeters: 420,
+      openingHours: 'Lun - Ven: 08:00 - 19:30 · Sabato: Mattina',
+      isLocker247: false,
+      shippingFee: 3.29,
+      code: 'BRT-IT-9102',
+    },
+    {
+      id: 'mr-loc-04',
+      carrier: 'Mondial Relay / Punto Pack',
+      name: `Mondial Relay Punto Pack Tech - ${city}`,
+      address: query ? `Via Roma 22, ${city}` : 'Via Lazzaro Palazzi 22',
+      city: query || 'Milano',
+      postalCode: '20124',
+      country,
+      distanceMeters: 550,
+      openingHours: 'Lun - Sab: 09:30 - 19:30',
+      isLocker247: false,
+      shippingFee: 2.99,
+      code: 'MR-IT-4819',
+    },
+    {
+      id: 'ups-loc-05',
+      carrier: 'UPS Access Point',
+      name: `UPS Access Point Center - ${city}`,
+      address: query ? `Viale Stazione 41, ${city}` : 'Viale Tunisia 41',
+      city: query || 'Milano',
+      postalCode: '20124',
+      country,
+      distanceMeters: 690,
+      openingHours: 'Lun - Ven: 09:00 - 19:00',
+      isLocker247: false,
+      shippingFee: 3.49,
+      code: 'UPS-IT-2231',
+    },
+  ];
+
+  res.json({
+    success: true,
+    points: samplePoints,
+    total: samplePoints.length,
+    closest: samplePoints[0],
+  });
+});
+
+// 2. Connect & Verify Vinted Account
+app.post('/api/vinted/account/connect', (req, res) => {
+  const { username = 'utente_vinted', country = 'Italia', email } = req.body || {};
+  const cleanUsername = (username || '').replace('@', '').trim() || 'utente_vinted';
+
+  const account = {
+    isConnected: true,
+    username: cleanUsername,
+    email: email || `${cleanUsername}@gmail.com`,
+    rating: 5.0,
+    reviewCount: Math.floor(Math.random() * 80) + 25,
+    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
+    country,
+    paymentMethod: {
+      type: 'Saldo Portafoglio Vinted + Carta Salvata',
+      last4: '4821',
+      balance: 145.50,
+    },
+    connectedAt: Date.now(),
+  };
+
+  res.json({
+    success: true,
+    message: 'Account Vinted collegato con successo! Puoi ora acquistare direttamente in-app.',
+    account,
+  });
+});
+
+// 3. Direct In-App Buy & Order Generation
+app.post('/api/vinted/checkout/buy', (req, res) => {
+  const { item, pickupPoint, account } = req.body || {};
+
+  if (!item || !pickupPoint) {
+    return res.status(400).json({ success: false, error: 'Dati articolo o punto di ritiro mancanti.' });
+  }
+
+  const itemPrice = Number(item.price) || 10;
+  const shippingFee = Number(pickupPoint.shippingFee) || 2.89;
+  const buyerProtectionFee = Number((0.70 + itemPrice * 0.05).toFixed(2));
+  const totalPaid = Number((itemPrice + buyerProtectionFee + shippingFee).toFixed(2));
+
+  const orderId = `VNT-ORD-${Date.now().toString().slice(-6)}`;
+  const trackingCode = `INP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+  const order = {
+    orderId,
+    itemId: item.id || `vnt-${Date.now()}`,
+    itemTitle: item.title || 'Articolo Vinted',
+    itemBrand: item.brand || 'Vinted',
+    itemSize: item.size || 'Unica',
+    itemPrice,
+    itemImageUrl: item.imageUrl || '',
+    buyerProtectionFee,
+    shippingFee,
+    totalPaid,
+    sellerUsername: item.seller?.username || 'venditore_vinted',
+    pickupPoint,
+    trackingCode,
+    estimatedDelivery: '2 - 3 giorni lavorativi',
+    createdAt: Date.now(),
+    status: 'CONFERMATO',
+  };
+
+  res.json({
+    success: true,
+    message: '🎉 Acquisto completato con successo!',
+    order,
+  });
+});
+
 app.get('/api/vinted/status', (_req, res) => {
   res.json({
     status: 'ONLINE',

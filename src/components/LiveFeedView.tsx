@@ -61,6 +61,7 @@ interface LiveFeedViewProps {
   onSelectMonitorFilter?: (id: string) => void;
   onGoToMonitorsTab?: () => void;
   lastLiveSyncTime?: number;
+  onDirectBuyItem?: (item: VintedListing) => void;
 }
 
 export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
@@ -80,6 +81,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   onSelectMonitorFilter,
   onGoToMonitorsTab,
   lastLiveSyncTime,
+  onDirectBuyItem,
 }) => {
   // Normalize multi-monitor selection (supports array of selected monitor IDs or 'all')
   const selectedFiltersArray: string[] = useMemo(() => {
@@ -1566,16 +1568,25 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 </div>
               </div>
 
-              {/* Compra su Vinted Button */}
-              <div className="pt-0.5">
+              {/* Compra Subito Diretto in App & Link Esterno Vinted */}
+              <div className="pt-0.5 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onDirectBuyItem ? onDirectBuyItem(item) : onAutocopItem(item)}
+                  className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg bg-[#09B1BA] hover:bg-[#079aa2] text-zinc-950 font-black text-[10px] sm:text-xs uppercase tracking-wide flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm shadow-[#09B1BA]/20 cursor-pointer text-center"
+                  title="Compra direttamente in-app e ritira al punto più vicino"
+                >
+                  <Zap className="w-3 h-3 fill-zinc-950 shrink-0" />
+                  <span className="truncate">COMPRA IN APP</span>
+                </button>
                 <a
                   href={item.vintedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-1.5 sm:py-2 px-2 rounded-lg bg-[#09B1BA] hover:bg-[#079aa2] text-zinc-950 font-black text-[10px] sm:text-xs uppercase tracking-wide flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm shadow-[#09B1BA]/20 cursor-pointer text-center"
+                  className="p-1.5 sm:p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700/80 shrink-0 flex items-center justify-center"
+                  title="Vedi su Vinted nel browser"
                 >
-                  <Zap className="w-3 h-3 fill-zinc-950 shrink-0" />
-                  <span className="truncate">COMPRA SU VINTED</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
 

@@ -5,8 +5,12 @@ import { MonitorsManager } from './components/MonitorsManager';
 import { AutocopSimulator } from './components/AutocopSimulator';
 import { GuidesView } from './components/GuidesView';
 import { IpaExportView } from './components/IpaExportView';
+import { VintedAccountModal } from './components/VintedAccountModal';
+import { PickupPointSelectorModal } from './components/PickupPointSelectorModal';
+import { DirectCheckoutModal } from './components/DirectCheckoutModal';
 import { INITIAL_LISTINGS, INITIAL_MONITORS } from './data/mockDeals';
-import { VintedListing, VintedMonitor } from './types';
+import { VintedListing, VintedMonitor, VintedAccount, VintedPickupPoint, VintedOrder } from './types';
+import { DEFAULT_VINTED_ACCOUNT, SAMPLE_PICKUP_POINTS_MILAN } from './data/pickupPoints';
 import { playAlertChime } from './services/vintedAutonomousEngine';
 import { matchListingToMonitor } from './utils/monitorMatcher';
 
@@ -30,6 +34,38 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number>(1);
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(true);
+
+  // Vinted Account & Pickup Point State
+  const [vintedAccount, setVintedAccount] = useState<VintedAccount>(() => {
+    try {
+      const saved = localStorage.getItem('fyndit_vinted_account');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_VINTED_ACCOUNT;
+  });
+
+  const [userHomeAddress, setUserHomeAddress] = useState<string>(() => {
+    return localStorage.getItem('fyndit_user_address') || 'Via Dante 14, Milano';
+  });
+
+  const [selectedPickupPoint, setSelectedPickupPoint] = useState<VintedPickupPoint>(() => {
+    try {
+      const saved = localStorage.getItem('fyndit_selected_pickup');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return SAMPLE_PICKUP_POINTS_MILAN[0];
+  });
+
+  const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
+  const [showPickupModal, setShowPickupModal] = useState<boolean>(false);
+  const [checkoutItem, setCheckoutItem] = useState<VintedListing | null>(null);
+  const [orders, setOrders] = useState<VintedOrder[]>(() => {
+    try {
+      const saved = localStorage.getItem('fyndit_orders');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
 
   // Active search filters
   const [activeSearch, setActiveSearch] = useState<string>('');
@@ -58,6 +94,38 @@ export default function App() {
       // ignore
     }
   }, [monitors]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fyndit_vinted_account', JSON.stringify(vintedAccount));
+    } catch {
+      // ignore
+    }
+  }, [vintedAccount]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fyndit_selected_pickup', JSON.stringify(selectedPickupPoint));
+    } catch {
+      // ignore
+    }
+  }, [selectedPickupPoint]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fyndit_user_address', userHomeAddress);
+    } catch {
+      // ignore
+    }
+  }, [userHomeAddress]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fyndit_orders', JSON.stringify(orders));
+    } catch {
+      // ignore
+    }
+  }, [orders]);
 
   useEffect(() => {
     activeSearchRef.current = activeSearch;
@@ -518,6 +586,32 @@ export default function App() {
     setActiveTab('feed');
   };
 
+  const handleSelectPickupPoint = (point: VintedPickupPoint) => {
+    setSelectedPickupPoint(point);
+    setVintedAccount((prev) => ({
+      ...prev,
+      preferredPickupPoint: point,
+    }));
+    setToastMessage(`Punto di ritiro selezionato: ${point.name} (${point.distanceMeters}m da casa)`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleUpdateAccount = (acc: VintedAccount) => {
+    setVintedAccount(acc);
+    setToastMessage(`Account Vinted aggiornato: @${acc.username}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleDirectBuyItem = (item: VintedListing) => {
+    setCheckoutItem(item);
+  };
+
+  const handleOrderSuccess = (order: VintedOrder) => {
+    setOrders((prev) => [order, ...prev]);
+    setToastMessage(`🎉 Ordine #${order.orderId} confermato! Consegna a ${order.pickupPoint.name}`);
+    setTimeout(() => setToastMessage(null), 4500);
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       
@@ -537,6 +631,9 @@ export default function App() {
         }}
         activeMonitorsCount={monitors.filter((m) => m.isActive).length}
         newDealsCount={newDealsCount}
+        account={vintedAccount}
+        onOpenAccountModal={() => setShowAccountModal(true)}
+        onOpenPickupModal={() => setShowPickupModal(true)}
       />
 
       {/* Silent Live Status Bar */}
@@ -585,6 +682,7 @@ export default function App() {
           <LiveFeedView
             listings={listings}
             onAutocopItem={handleAutocopItem}
+            onDirectBuyItem={handleDirectBuyItem}
             onFilterChange={executeSearch}
             currentSearch={activeSearch}
             currentBrand={activeBrand}
@@ -625,6 +723,37 @@ export default function App() {
           <IpaExportView />
         )}
       </main>
+
+      {/* Vinted Account Modal */}
+      <VintedAccountModal
+        isOpen={showAccountModal}
+        onClose={() => setShowAccountModal(false)}
+        account={vintedAccount}
+        onUpdateAccount={handleUpdateAccount}
+        onOpenPickupSelector={() => setShowPickupModal(true)}
+      />
+
+      {/* Pickup Point Selector Modal */}
+      <PickupPointSelectorModal
+        isOpen={showPickupModal}
+        onClose={() => setShowPickupModal(false)}
+        selectedPoint={selectedPickupPoint}
+        onSelectPoint={handleSelectPickupPoint}
+        userAddress={userHomeAddress}
+        setUserAddress={setUserHomeAddress}
+      />
+
+      {/* Direct In-App Checkout Modal */}
+      <DirectCheckoutModal
+        isOpen={Boolean(checkoutItem)}
+        onClose={() => setCheckoutItem(null)}
+        item={checkoutItem}
+        account={vintedAccount}
+        pickupPoint={selectedPickupPoint}
+        onChangePickupPoint={() => setShowPickupModal(true)}
+        onConnectAccount={() => setShowAccountModal(true)}
+        onOrderSuccess={handleOrderSuccess}
+      />
 
       {/* Mobile-friendly Bottom Safe Spacing */}
       <div className="h-6" />

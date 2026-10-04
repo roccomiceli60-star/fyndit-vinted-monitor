@@ -7,9 +7,12 @@ import {
   BookOpen, 
   Smartphone, 
   BellRing,
-  Activity
+  Activity,
+  User,
+  MapPin
 } from 'lucide-react';
 import fynditIcon from '../assets/images/fyndit_icon_1790842000865.jpg';
+import { VintedAccount } from '../types';
 
 export type TabType = 'feed' | 'monitors' | 'autocop' | 'guide' | 'ipa';
 
@@ -18,6 +21,9 @@ interface HeaderProps {
   setActiveTab: (tab: TabType) => void;
   activeMonitorsCount: number;
   newDealsCount: number;
+  account?: VintedAccount;
+  onOpenAccountModal?: () => void;
+  onOpenPickupModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,6 +31,9 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   activeMonitorsCount,
   newDealsCount,
+  account,
+  onOpenAccountModal,
+  onOpenPickupModal,
 }) => {
   return (
     <header className="border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl sticky top-0 z-50">
@@ -126,10 +135,41 @@ export const Header: React.FC<HeaderProps> = ({
             <Smartphone className="w-4 h-4" />
             Scarica iOS IPA
           </button>
+
+          {/* Vinted Account & Preferred Locker Button */}
+          <button
+            type="button"
+            onClick={onOpenAccountModal}
+            className="ml-1 px-3 py-1.5 rounded-xl border transition-all flex items-center gap-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 border-teal-500/40 hover:border-teal-400 shadow-sm cursor-pointer"
+            title="Gestisci Account Vinted e Punto di Ritiro più vicino"
+          >
+            <div className="relative">
+              <User className="w-4 h-4 text-teal-400" />
+              {account?.isConnected && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 absolute -top-0.5 -right-0.5 border border-zinc-950 animate-pulse" />
+              )}
+            </div>
+            <div className="text-left hidden lg:block">
+              <div className="text-[11px] font-bold text-white leading-tight truncate max-w-[110px]">
+                {account?.isConnected ? `@${account.username}` : 'Collega Vinted'}
+              </div>
+              <div className="text-[9px] text-teal-400 truncate max-w-[110px]">
+                {account?.preferredPickupPoint ? `📍 ${account.preferredPickupPoint.carrier.split(' ')[0]}` : '📍 Scegli Locker'}
+              </div>
+            </div>
+          </button>
         </nav>
 
         {/* Mobile Navigation button */}
         <div className="flex md:hidden items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenAccountModal}
+            className="p-2 rounded-lg bg-teal-950/40 text-teal-300 border border-teal-500/40"
+            title="Account Vinted & Punto di Ritiro"
+          >
+            <User className="w-4 h-4" />
+          </button>
           <button
             onClick={() => setActiveTab('ipa')}
             className="p-2 rounded-lg bg-cyan-950/60 text-cyan-400 border border-cyan-800/60"

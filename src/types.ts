@@ -91,3 +91,62 @@ export interface AutocopLog {
   status: 'SUCCESS' | 'MISSED' | 'PENDING';
   timestamp: string;
 }
+
+export type VintedCarrier = 
+  | 'InPost Locker 24/7' 
+  | 'PuntoPoste (Poste Italiane)' 
+  | 'BRT Fermopoint' 
+  | 'Mondial Relay / Punto Pack' 
+  | 'UPS Access Point' 
+  | 'GLS ParcelShop';
+
+export interface VintedPickupPoint {
+  id: string;
+  carrier: VintedCarrier;
+  name: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  country: string;
+  distanceMeters: number;
+  openingHours: string;
+  isLocker247: boolean;
+  shippingFee: number;
+  code?: string;
+}
+
+export interface VintedAccount {
+  isConnected: boolean;
+  username: string;
+  email?: string;
+  rating?: number;
+  reviewCount?: number;
+  avatarUrl?: string;
+  country: string;
+  preferredPickupPoint?: VintedPickupPoint;
+  paymentMethod: {
+    type: string;
+    last4?: string;
+    balance?: number;
+  };
+  connectedAt?: number;
+}
+
+export interface VintedOrder {
+  orderId: string;
+  itemId: string;
+  itemTitle: string;
+  itemBrand: string;
+  itemSize: string;
+  itemPrice: number;
+  itemImageUrl: string;
+  buyerProtectionFee: number;
+  shippingFee: number;
+  totalPaid: number;
+  sellerUsername: string;
+  pickupPoint: VintedPickupPoint;
+  trackingCode: string;
+  estimatedDelivery: string;
+  createdAt: number;
+  status: 'CONFERMATO' | 'IN_PREPARAZIONE' | 'SPEDITO' | 'CONSEGNATO_AL_LOCKER';
+}
