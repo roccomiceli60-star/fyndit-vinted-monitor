@@ -12,6 +12,8 @@ export interface VintedListing {
   rawId?: number;
   title: string;
   brand: string;
+  model?: string;
+  color?: string;
   category: string;
   size: string;
   condition: ConditionType;
@@ -33,13 +35,16 @@ export interface VintedListing {
   vintedUrl: string;
   publishedSecondsAgo: number;
   dealScore: DealScore;
+  matchScore?: number; // 0 to 100 priority score
   likesCount: number;
   isNewDrop?: boolean;
   discoveredAt?: number;
   potentialProfit?: number;
   resellNotes?: string;
+  description?: string;
   matchedMonitorName?: string;
   matchedMonitorId?: string;
+  itemStatus?: 'DISPONIBILE' | 'ACQUISTATO' | 'VENDUTO';
 }
 
 export interface VintedMonitor {
@@ -48,6 +53,8 @@ export interface VintedMonitor {
   category?: string;
   subcategories?: string[];
   brands: string[];
+  model?: string;
+  color?: string;
   keywords: string[];
   excludedKeywords: string[];
   sizes: string[];
@@ -56,6 +63,8 @@ export interface VintedMonitor {
   minDiscountPercent?: number;
   minCondition?: ConditionType | 'Tutte';
   countries?: string[];
+  minSellerRating?: number;
+  targetMatchScoreMin?: number;
   isActive: boolean;
   enableSound?: boolean;
   enableNotifications?: boolean;
@@ -124,6 +133,12 @@ export interface VintedAccount {
   avatarUrl?: string;
   country: string;
   preferredPickupPoint?: VintedPickupPoint;
+  alternativePickupPoints?: VintedPickupPoint[];
+  fallbackStrategy?: 'NEAREST' | 'FIRST_AVAILABLE' | 'ONLY_247_LOCKER';
+  maxPickupDistanceMeters?: number;
+  fastModeEnabled?: boolean;
+  soundEnabled?: boolean;
+  vibrationEnabled?: boolean;
   paymentMethod: {
     type: string;
     last4?: string;

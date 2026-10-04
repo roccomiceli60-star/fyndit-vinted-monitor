@@ -30,10 +30,13 @@ import {
   Rows,
   RefreshCw,
   Target,
-  Plus
+  Plus,
+  MapPin
 } from 'lucide-react';
-import { VintedListing, VintedMonitor } from '../types';
+import { VintedListing, VintedMonitor, VintedPickupPoint } from '../types';
 import { matchListingToMonitor } from '../utils/monitorMatcher';
+import { calculateMatchScore } from '../utils/matchScoreEngine';
+import { calculateVintedCheckoutBreakdown } from '../data/pickupPoints';
 import { 
   POPULAR_BRANDS, 
   CLOTHING_SIZES, 
@@ -62,6 +65,8 @@ interface LiveFeedViewProps {
   onGoToMonitorsTab?: () => void;
   lastLiveSyncTime?: number;
   onDirectBuyItem?: (item: VintedListing) => void;
+  pickupPoint?: VintedPickupPoint;
+  fastModeActive?: boolean;
 }
 
 export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
@@ -82,6 +87,8 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
   onGoToMonitorsTab,
   lastLiveSyncTime,
   onDirectBuyItem,
+  pickupPoint,
+  fastModeActive = true,
 }) => {
   // Normalize multi-monitor selection (supports array of selected monitor IDs or 'all')
   const selectedFiltersArray: string[] = useMemo(() => {
@@ -399,7 +406,20 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
 
         return true;
       })
+      .map((item) => {
+        const matchedMon = monitors.find((m) => m.id === item.matchedMonitorId) || monitors[0];
+        const matchRes = calculateMatchScore(item, matchedMon);
+        return {
+          ...item,
+          matchScore: matchRes.score,
+        };
+      })
       .sort((a, b) => {
+        // FAST MODE: strictly prioritize highest Match Score first (98/100, 96/100...)
+        if (fastModeActive) {
+          const scoreDiff = (b.matchScore || 0) - (a.matchScore || 0);
+          if (scoreDiff !== 0) return scoreDiff;
+        }
         if (sortBy === 'price_asc') return a.price - b.price;
         if (sortBy === 'price_desc') return b.price - a.price;
         // Default newest: sort strictly by rawId (highest ID = published most recently on Vinted)
@@ -422,6 +442,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
     monitorsMode,
     selectedMonitorFilter,
     monitors,
+    fastModeActive,
   ]);
 
   // Compute active filters count
@@ -1508,6 +1529,10 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
               />
               {/* Status Badges */}
               <div className="absolute top-1.5 left-1.5 flex items-center gap-1 flex-wrap max-w-[85%]">
+                <span className="px-1.5 py-0.5 rounded bg-amber-400 text-zinc-950 text-[8px] sm:text-[9px] font-black uppercase tracking-wider flex items-center gap-0.5 shadow-md">
+                  <Flame className="w-2.5 h-2.5 fill-zinc-950" />
+                  MATCH {item.matchScore || 96}%
+                </span>
                 {item.isNewDrop && (
                   <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-zinc-950 text-[8px] sm:text-[9px] font-black uppercase tracking-wider animate-pulse flex items-center gap-0.5 shadow-md">
                     <Zap className="w-2.5 h-2.5 fill-zinc-950" /> DROP
@@ -1551,44 +1576,64 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({
                 </h3>
               </div>
 
-              {/* Solo Prezzo Vinted (Senza Protezione) */}
-              <div className="p-1.5 sm:p-2 rounded-lg bg-zinc-950/90 border border-zinc-800/80 flex items-center justify-between">
-                <span className="text-[9px] sm:text-[10px] uppercase font-extrabold text-zinc-400 tracking-wider">
-                  Prezzo Vinted
-                </span>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-sm sm:text-base font-black text-emerald-400 font-mono tracking-tight">
-                    €{item.price.toFixed(2)}
+              {/* Delivery Locker info & Cost Breakdown */}
+              <div className="space-y-1">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-zinc-950/90 border border-zinc-800/80 flex items-center justify-between">
+                  <span className="text-[9px] sm:text-[10px] uppercase font-extrabold text-zinc-400 tracking-wider">
+                    Prezzo Vinted
                   </span>
-                  {item.originalCurrency && item.originalCurrency !== 'EUR' && (
-                    <span className="text-[9px] sm:text-[10px] text-zinc-400 font-mono">
-                      ({item.originalPriceDisplay})
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-sm sm:text-base font-black text-emerald-400 font-mono tracking-tight">
+                      €{item.price.toFixed(2)}
                     </span>
-                  )}
+                    {item.originalCurrency && item.originalCurrency !== 'EUR' && (
+                      <span className="text-[9px] sm:text-[10px] text-zinc-400 font-mono">
+                        ({item.originalPriceDisplay})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-zinc-400 px-0.5">
+                  <span className="flex items-center gap-1 truncate">
+                    <MapPin className="w-3 h-3 text-teal-400 shrink-0" />
+                    <span className="truncate">Ritiro: <strong>{pickupPoint?.carrier.split(' ')[0] || 'InPost'}</strong> ({pickupPoint?.distanceMeters || 130}m)</span>
+                  </span>
+                  <span className="font-mono text-zinc-300 text-[9px] shrink-0">
+                    Sped. €{(pickupPoint?.shippingFee || 2.89).toFixed(2)}
+                  </span>
                 </div>
               </div>
 
-              {/* Compra Subito Diretto in App & Link Esterno Vinted */}
-              <div className="pt-0.5 flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onDirectBuyItem ? onDirectBuyItem(item) : onAutocopItem(item)}
-                  className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg bg-[#09B1BA] hover:bg-[#079aa2] text-zinc-950 font-black text-[10px] sm:text-xs uppercase tracking-wide flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm shadow-[#09B1BA]/20 cursor-pointer text-center"
-                  title="Compra direttamente in-app e ritira al punto più vicino"
-                >
-                  <Zap className="w-3 h-3 fill-zinc-950 shrink-0" />
-                  <span className="truncate">COMPRA IN APP</span>
-                </button>
-                <a
-                  href={item.vintedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1.5 sm:p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700/80 shrink-0 flex items-center justify-center"
-                  title="Vedi su Vinted nel browser"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
+              {/* ACQUISTA ORA Button */}
+              {(() => {
+                const pFee = pickupPoint?.shippingFee || 2.89;
+                const bFee = Number((0.70 + item.price * 0.05).toFixed(2));
+                const total = item.price + pFee + bFee;
+
+                return (
+                  <div className="pt-0.5 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onDirectBuyItem ? onDirectBuyItem(item) : onAutocopItem(item)}
+                      className="flex-1 py-2 px-2 rounded-xl bg-gradient-to-r from-teal-400 to-[#09B1BA] hover:from-teal-300 hover:to-teal-400 text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-md shadow-teal-500/20 cursor-pointer text-center"
+                      title="Procedi all'acquisto immediato"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-zinc-950 shrink-0" />
+                      <span className="truncate">ACQUISTA ORA (€{total.toFixed(2)})</span>
+                    </button>
+                    <a
+                      href={item.vintedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700/80 shrink-0 flex items-center justify-center"
+                      title="Vedi su Vinted nel browser"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                );
+              })()}
 
             </div>
 

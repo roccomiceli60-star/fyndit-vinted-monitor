@@ -8,11 +8,19 @@ import { IpaExportView } from './components/IpaExportView';
 import { VintedAccountModal } from './components/VintedAccountModal';
 import { PickupPointSelectorModal } from './components/PickupPointSelectorModal';
 import { DirectCheckoutModal } from './components/DirectCheckoutModal';
+import { OrdersDashboardView } from './components/OrdersDashboardView';
+import { QuickBuyNotificationBanner } from './components/QuickBuyNotificationBanner';
 import { INITIAL_LISTINGS, INITIAL_MONITORS } from './data/mockDeals';
 import { VintedListing, VintedMonitor, VintedAccount, VintedPickupPoint, VintedOrder } from './types';
 import { DEFAULT_VINTED_ACCOUNT, SAMPLE_PICKUP_POINTS_MILAN } from './data/pickupPoints';
 import { playAlertChime } from './services/vintedAutonomousEngine';
 import { matchListingToMonitor } from './utils/monitorMatcher';
+import { calculateMatchScore } from './utils/matchScoreEngine';
+import { 
+  playQuickBuyNotificationChime, 
+  triggerSystemPushNotification, 
+  requestPushNotificationPermission 
+} from './utils/quickBuyNotifier';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
@@ -59,6 +67,7 @@ export default function App() {
   const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
   const [showPickupModal, setShowPickupModal] = useState<boolean>(false);
   const [checkoutItem, setCheckoutItem] = useState<VintedListing | null>(null);
+  const [quickBuyAlertItem, setQuickBuyAlertItem] = useState<VintedListing | null>(null);
   const [orders, setOrders] = useState<VintedOrder[]>(() => {
     try {
       const saved = localStorage.getItem('fyndit_orders');
@@ -66,6 +75,11 @@ export default function App() {
     } catch {}
     return [];
   });
+
+  // Request browser push notification permissions once
+  useEffect(() => {
+    requestPushNotificationPermission();
+  }, []);
 
   // Active search filters
   const [activeSearch, setActiveSearch] = useState<string>('');
@@ -184,16 +198,40 @@ export default function App() {
 
       if (brandNew.length === 0) return prev;
 
-      // Audio notification on new drops
-      try {
-        playAlertChime();
-      } catch {
-        // audio might require user interaction first
+      // Score new drops against matched monitors
+      const activeMons = monitorsRef.current.filter((m) => m.isActive);
+      const scoredBrandNew = brandNew.map((item) => {
+        const matchingMon = activeMons.find(
+          (m) => m.id === item.matchedMonitorId || m.name === item.matchedMonitorName
+        ) || activeMons[0];
+        const matchRes = calculateMatchScore(item, matchingMon);
+        return {
+          ...item,
+          matchScore: matchRes.score,
+        };
+      });
+
+      // Find top priority match for immediate push & banner
+      const topMatch = [...scoredBrandNew].sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0))[0];
+
+      if (topMatch && (topMatch.matchScore || 0) >= 65) {
+        setQuickBuyAlertItem(topMatch);
+        if (vintedAccount.soundEnabled !== false) {
+          playQuickBuyNotificationChime();
+        }
+        triggerSystemPushNotification(topMatch, topMatch.matchScore || 96);
+      } else {
+        try {
+          if (vintedAccount.soundEnabled !== false) {
+            playAlertChime();
+          }
+        } catch {
+          // audio might require user interaction first
+        }
       }
 
       // Forward to Discord webhook if configured on the matching monitor
-      const activeMons = monitorsRef.current.filter((m) => m.isActive);
-      for (const item of brandNew) {
+      for (const item of scoredBrandNew) {
         const matchingMon = activeMons.find((m) => m.name === item.matchedMonitorName);
         if (matchingMon?.discordWebhookUrl) {
           fetch('/api/discord-webhook', {
@@ -208,10 +246,10 @@ export default function App() {
         }
       }
 
-      setNewDealsCount((c) => c + brandNew.length);
-      return [...brandNew, ...prev].slice(0, 150);
+      setNewDealsCount((c) => c + scoredBrandNew.length);
+      return [...scoredBrandNew, ...prev].slice(0, 150);
     });
-  }, []);
+  }, [vintedAccount.soundEnabled]);
 
   // Real-time SSE Connection with Query Subscription (Real-time Drops for Search & Home)
   useEffect(() => {
@@ -615,6 +653,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       
+      {/* Instant Push Alert Banner */}
+      <QuickBuyNotificationBanner
+        item={quickBuyAlertItem}
+        pickupPoint={selectedPickupPoint}
+        onBuyNow={(item) => handleDirectBuyItem(item)}
+        onDismiss={() => setQuickBuyAlertItem(null)}
+      />
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-cyan-500 text-zinc-950 font-bold shadow-2xl flex items-center gap-2 animate-bounce">
@@ -634,6 +680,21 @@ export default function App() {
         account={vintedAccount}
         onOpenAccountModal={() => setShowAccountModal(true)}
         onOpenPickupModal={() => setShowPickupModal(true)}
+        ordersCount={orders.length}
+        fastModeActive={vintedAccount.fastModeEnabled ?? true}
+        onToggleFastMode={() =>
+          setVintedAccount((prev) => ({
+            ...prev,
+            fastModeEnabled: !(prev.fastModeEnabled ?? true),
+          }))
+        }
+        soundEnabled={vintedAccount.soundEnabled ?? true}
+        onToggleSound={() =>
+          setVintedAccount((prev) => ({
+            ...prev,
+            soundEnabled: !(prev.soundEnabled ?? true),
+          }))
+        }
       />
 
       {/* Silent Live Status Bar */}
@@ -697,6 +758,8 @@ export default function App() {
             onSelectMonitorFilter={handleToggleMonitorFilter}
             onGoToMonitorsTab={() => setActiveTab('monitors')}
             lastLiveSyncTime={lastLiveSyncTime}
+            pickupPoint={selectedPickupPoint}
+            fastModeActive={vintedAccount.fastModeEnabled ?? true}
           />
         )}
 
@@ -708,6 +771,24 @@ export default function App() {
             onAddMonitor={handleAddMonitor}
             onUpdateMonitor={handleUpdateMonitor}
             onViewInFeed={handleViewMonitorInFeed}
+          />
+        )}
+
+        {activeTab === 'orders' && (
+          <OrdersDashboardView
+            orders={orders}
+            account={vintedAccount}
+            pickupPoint={selectedPickupPoint}
+            monitors={monitors}
+            recentListings={listings.slice(0, 8)}
+            isLiveConnected={isLiveConnected}
+            latencyMs={latencyMs}
+            turboSniperActive={turboSniper}
+            onGoToFeed={() => setActiveTab('feed')}
+            onGoToMonitors={() => setActiveTab('monitors')}
+            onOpenPickupModal={() => setShowPickupModal(true)}
+            onOpenAccountModal={() => setShowAccountModal(true)}
+            onDirectBuyItem={handleDirectBuyItem}
           />
         )}
 
@@ -741,6 +822,18 @@ export default function App() {
         onSelectPoint={handleSelectPickupPoint}
         userAddress={userHomeAddress}
         setUserAddress={setUserHomeAddress}
+        alternativePoints={vintedAccount.alternativePickupPoints || []}
+        onUpdateAlternativePoints={(pts) =>
+          setVintedAccount((prev) => ({ ...prev, alternativePickupPoints: pts }))
+        }
+        fallbackStrategy={vintedAccount.fallbackStrategy || 'NEAREST'}
+        onChangeFallbackStrategy={(strat) =>
+          setVintedAccount((prev) => ({ ...prev, fallbackStrategy: strat }))
+        }
+        maxDistanceKm={Math.round((vintedAccount.maxPickupDistanceMeters || 2000) / 1000)}
+        onChangeMaxDistanceKm={(km) =>
+          setVintedAccount((prev) => ({ ...prev, maxPickupDistanceMeters: km * 1000 }))
+        }
       />
 
       {/* Direct In-App Checkout Modal */}

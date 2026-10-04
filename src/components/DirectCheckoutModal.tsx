@@ -324,6 +324,9 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
                     €{fees.total.toFixed(2)}
                   </span>
                 </div>
+                <div className="p-2 rounded-xl bg-zinc-900 border border-zinc-800/80 text-[11px] text-zinc-400 font-mono text-center">
+                  €{fees.itemPrice.toFixed(2)} (articolo) + €{fees.shippingFee.toFixed(2)} (spedizione) + €{fees.buyerProtectionFee.toFixed(2)} (protezione) = <strong className="text-emerald-400">€{fees.total.toFixed(2)}</strong>
+                </div>
               </div>
 
               {/* Dual Action: In-App Buy & Direct Vinted Buy with Pre-selected Locker */}
@@ -331,10 +334,10 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
                 <button
                   type="button"
                   onClick={handleConfirmPurchase}
-                  className="w-full py-3 rounded-full bg-[#09B1BA] hover:bg-teal-400 text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xl shadow-teal-500/25 active:scale-95 cursor-pointer"
+                  className="w-full py-3.5 rounded-full bg-gradient-to-r from-teal-400 to-[#09B1BA] hover:from-teal-300 hover:to-teal-400 text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xl shadow-teal-500/25 active:scale-95 cursor-pointer"
                 >
                   <Zap className="w-4 h-4 fill-zinc-950" />
-                  <span>CONFERMA E COMPRA ORA IN-APP (€{fees.total.toFixed(2)})</span>
+                  <span>ACQUISTA ORA (€{fees.total.toFixed(2)})</span>
                 </button>
 
                 <button
