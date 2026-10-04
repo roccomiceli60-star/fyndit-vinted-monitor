@@ -23,7 +23,7 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
-  const [listings, setListings] = useState<VintedListing[]>([]);
+  const [listings, setListings] = useState<VintedListing[]>(() => INITIAL_LISTINGS);
   const [lastLiveSyncTime, setLastLiveSyncTime] = useState<number>(Date.now());
   const [monitors, setMonitors] = useState<VintedMonitor[]>(() => {
     try {
@@ -98,6 +98,11 @@ export default function App() {
   const monitorsRef = useRef<VintedMonitor[]>(monitors);
   const monitorsModeRef = useRef<boolean>(monitorsMode);
   const selectedMonitorFilterRef = useRef<string[]>(selectedMonitorFilter);
+  const vintedAccountRef = useRef<VintedAccount>(vintedAccount);
+
+  useEffect(() => {
+    vintedAccountRef.current = vintedAccount;
+  }, [vintedAccount]);
 
   useEffect(() => {
     try {
@@ -211,7 +216,7 @@ export default function App() {
 
       // Play audio notification if sound is enabled
       try {
-        if (vintedAccount.soundEnabled !== false) {
+        if (vintedAccountRef.current.soundEnabled !== false) {
           playAlertChime();
         }
       } catch {
@@ -237,7 +242,7 @@ export default function App() {
       setNewDealsCount((c) => c + scoredBrandNew.length);
       return [...scoredBrandNew, ...prev].slice(0, 150);
     });
-  }, [vintedAccount.soundEnabled]);
+  }, []);
 
   // Real-time SSE Connection with Query Subscription (Real-time Drops for Search & Home)
   useEffect(() => {
@@ -375,6 +380,10 @@ export default function App() {
         setLastLiveSyncTime(Date.now());
 
         setListings((prev) => {
+          if (strictlyMatched.length === 0) {
+            return prev.length > 0 ? prev : INITIAL_LISTINGS;
+          }
+
           if (prev.length === 0) return strictlyMatched.slice(0, 150);
 
           const prevMap = new Map(prev.map((p) => [p.id, p]));
@@ -389,7 +398,11 @@ export default function App() {
           const brandNew = updated.filter((it) => it.isNewDrop && !prevMap.has(it.id));
           if (brandNew.length > 0) {
             setNewDealsCount((c) => c + brandNew.length);
-            try { playAlertChime(); } catch {}
+            try {
+              if (vintedAccountRef.current.soundEnabled !== false) {
+                playAlertChime();
+              }
+            } catch {}
 
             // Forward to Discord webhook if configured on the matching monitor
             for (const item of brandNew) {
@@ -410,9 +423,7 @@ export default function App() {
             }
           }
 
-          const retained = prev.filter(
-            (p) => !incomingIds.has(p.id) && targetMons.some((m) => matchListingToMonitor(p, m))
-          );
+          const retained = prev.filter((p) => !incomingIds.has(p.id));
           return [...updated, ...retained].slice(0, 150);
         });
         return;
@@ -484,13 +495,15 @@ export default function App() {
   useEffect(() => {
     if (!turboSniper) return;
 
-    // Immediate fetch
+    // Initial fetch
     fetchLiveRealtimeDrops(false);
 
-    // Turbo Sniper: 100% Real-Time ultra-low latency pulse interval (600ms)
+    // Dynamic interval: when SSE is connected, SSE handles instant drops with 0ms delay.
+    // Poller acts as a reliable sync heartbeat (3500ms) or rapid fallback (1000ms) if SSE disconnects.
+    const pollInterval = isSseConnectedRef.current ? 3500 : 1000;
     const interval = setInterval(() => {
       fetchLiveRealtimeDrops(false);
-    }, 600);
+    }, pollInterval);
 
     return () => clearInterval(interval);
   }, [turboSniper, fetchLiveRealtimeDrops]);
@@ -826,6 +839,7 @@ export default function App() {
         onChangePickupPoint={() => setShowPickupModal(true)}
         onConnectAccount={() => setShowAccountModal(true)}
         onOrderSuccess={handleOrderSuccess}
+        existingOrders={orders}
       />
 
       {/* Mobile-friendly Bottom Safe Spacing */}

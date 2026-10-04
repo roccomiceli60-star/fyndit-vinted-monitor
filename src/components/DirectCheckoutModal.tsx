@@ -28,6 +28,7 @@ interface DirectCheckoutModalProps {
   onChangePickupPoint: () => void;
   onConnectAccount: () => void;
   onOrderSuccess: (order: VintedOrder) => void;
+  existingOrders?: VintedOrder[];
 }
 
 export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
@@ -39,29 +40,62 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
   onChangePickupPoint,
   onConnectAccount,
   onOrderSuccess,
+  existingOrders = [],
 }) => {
   const [purchaseStep, setPurchaseStep] = useState<'REVIEW' | 'BUYING' | 'CONFIRMED'>('REVIEW');
   const [buyingProgressText, setBuyingProgressText] = useState('Verifica disponibilità su Vinted...');
   const [confirmedOrder, setConfirmedOrder] = useState<VintedOrder | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const timersRef = React.useRef<NodeJS.Timeout[]>([]);
+
+  // Cleanup pending timers on unmount or close
+  React.useEffect(() => {
+    return () => {
+      timersRef.current.forEach((t) => clearTimeout(t));
+      timersRef.current = [];
+    };
+  }, []);
+
+  // Check if item was already purchased
+  const alreadyPurchasedOrder = React.useMemo(() => {
+    if (!item) return null;
+    return existingOrders.find((o) => o.itemId === item.id) || null;
+  }, [item, existingOrders]);
 
   if (!isOpen || !item) return null;
 
   const fees = calculateVintedCheckoutBreakdown(item.price, pickupPoint?.shippingFee || 2.89);
 
   const handleConfirmPurchase = async () => {
+    if (isSubmitting || purchaseStep !== 'REVIEW') return;
+
+    if (alreadyPurchasedOrder) {
+      setConfirmedOrder(alreadyPurchasedOrder);
+      setPurchaseStep('CONFIRMED');
+      return;
+    }
+
     if (!account.isConnected) {
       onConnectAccount();
       return;
     }
 
+    setIsSubmitting(true);
     setPurchaseStep('BUYING');
     setBuyingProgressText('1/3: Verifica immediata disponibilità articolo...');
 
-    setTimeout(() => {
+    // Haptic feedback on start
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([20, 30, 20]);
+      }
+    } catch {}
+
+    const t1 = setTimeout(() => {
       setBuyingProgressText(`2/3: Assegnazione etichetta a ${pickupPoint.carrier}...`);
 
-      setTimeout(async () => {
+      const t2 = setTimeout(async () => {
         setBuyingProgressText('3/3: Esecuzione pagamento con Saldo Vinted...');
 
         try {
@@ -72,6 +106,7 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
               item,
               pickupPoint,
               account,
+              idempotencyKey: `buy-${item.id}-${account.username}`,
             }),
           });
           const data = await res.json();
@@ -97,6 +132,13 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
           setConfirmedOrder(order);
           setPurchaseStep('CONFIRMED');
           onOrderSuccess(order);
+
+          // Success haptics
+          try {
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              navigator.vibrate([40, 60, 40]);
+            }
+          } catch {}
         } catch {
           // Fallback order
           const fallbackOrder: VintedOrder = {
@@ -120,9 +162,15 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
           setConfirmedOrder(fallbackOrder);
           setPurchaseStep('CONFIRMED');
           onOrderSuccess(fallbackOrder);
+        } finally {
+          setIsSubmitting(false);
         }
       }, 400);
+
+      timersRef.current.push(t2);
     }, 400);
+
+    timersRef.current.push(t1);
   };
 
   const handleCopyLockerCode = () => {
@@ -139,17 +187,14 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
     onClose();
   };
 
-  const handleOpenOfficialVintedCheckout = () => {
-    if (!item) return;
+  const rawId = item.rawId || item.id.replace(/[^0-9]/g, '');
+  const officialCheckoutUrl = rawId
+    ? `https://www.vinted.it/transaction/buy/new?item_id=${rawId}&shipping_type=pickup`
+    : item.vintedUrl;
+
+  const handleCopyLockerInfo = () => {
     const lockerInfo = `${pickupPoint.carrier} - ${pickupPoint.name}, ${pickupPoint.address} (${pickupPoint.code || ''})`;
     navigator.clipboard.writeText(lockerInfo).catch(() => {});
-
-    const rawId = item.rawId || item.id.replace(/[^0-9]/g, '');
-    const checkoutUrl = rawId
-      ? `https://www.vinted.it/transaction/buy/new?item_id=${rawId}&shipping_type=pickup`
-      : item.vintedUrl;
-
-    window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -340,15 +385,17 @@ export const DirectCheckoutModal: React.FC<DirectCheckoutModalProps> = ({
                   <span>ACQUISTA ORA (€{fees.total.toFixed(2)})</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleOpenOfficialVintedCheckout}
-                  className="w-full py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-zinc-700/80 cursor-pointer"
+                <a
+                  href={officialCheckoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleCopyLockerInfo}
+                  className="w-full py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-zinc-700/80 cursor-pointer text-center"
                   title="Apre la cassa ufficiale di Vinted con questo punto di ritiro già preimpostato"
                 >
                   <span>⚡ Apri Checkout Ufficiale Vinted (con questo Locker)</span>
                   <ExternalLink className="w-3.5 h-3.5 text-teal-400" />
-                </button>
+                </a>
 
                 <p className="text-[10px] text-center text-zinc-400">
                   📍 Consegna preimpostata su: <strong className="text-teal-300">{pickupPoint?.name} ({pickupPoint?.distanceMeters}m da casa)</strong>

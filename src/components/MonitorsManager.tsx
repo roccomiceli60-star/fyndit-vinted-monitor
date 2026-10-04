@@ -69,6 +69,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
     'DE',
   ]);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+  const [webhookFeedback, setWebhookFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
 
   // Icon mapping
   const getCategoryIcon = (catName?: string) => {
@@ -835,13 +836,14 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                           });
                           const data = await res.json();
                           if (data.success) {
-                            alert('✅ Notifica di test inviata con successo sul tuo canale Discord!');
+                            setWebhookFeedback({ text: '✅ Notifica di test inviata con successo sul tuo canale Discord!' });
                           } else {
-                            alert(`❌ Errore Webhook: ${data.error || 'URL non valido'}`);
+                            setWebhookFeedback({ text: `❌ Errore Webhook: ${data.error || 'URL non valido'}`, isError: true });
                           }
                         } catch (err: any) {
-                          alert(`❌ Errore di rete: ${err.message}`);
+                          setWebhookFeedback({ text: `❌ Errore di rete: ${err.message}`, isError: true });
                         }
+                        setTimeout(() => setWebhookFeedback(null), 4000);
                       }}
                       className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs whitespace-nowrap transition-all"
                     >
@@ -849,6 +851,11 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                     </button>
                   )}
                 </div>
+                {webhookFeedback && (
+                  <p className={`text-[11px] font-medium pt-1 ${webhookFeedback.isError ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {webhookFeedback.text}
+                  </p>
+                )}
               </div>
 
               {/* Submit Buttons */}

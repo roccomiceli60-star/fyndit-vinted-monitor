@@ -51,6 +51,12 @@ export const PickupPointSelectorModal: React.FC<PickupPointSelectorModalProps> =
   const [searchInput, setSearchInput] = useState(userAddress || 'Milano');
   const [points, setPoints] = useState<VintedPickupPoint[]>(SAMPLE_PICKUP_POINTS_MILAN);
   const [isLocating, setIsLocating] = useState(false);
+  const [modalMessage, setModalMessage] = useState<{ text: string; isError?: boolean } | null>(null);
+
+  const showFeedback = (text: string, isError = false) => {
+    setModalMessage({ text, isError });
+    setTimeout(() => setModalMessage(null), 3500);
+  };
 
   if (!isOpen) return null;
 
@@ -60,11 +66,12 @@ export const PickupPointSelectorModal: React.FC<PickupPointSelectorModalProps> =
     setUserAddress(searchInput.trim());
     const results = getNearbyPickupPoints(searchInput.trim(), 'Italia');
     setPoints(results);
+    showFeedback(`Trovati ${results.length} punti di ritiro per "${searchInput.trim()}"`);
   };
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert('Geolocalizzazione non supportata dal tuo browser');
+      showFeedback('Geolocalizzazione non supportata dal tuo browser', true);
       return;
     }
     setIsLocating(true);
@@ -76,10 +83,11 @@ export const PickupPointSelectorModal: React.FC<PickupPointSelectorModalProps> =
         setUserAddress(autoAddr);
         const results = getNearbyPickupPoints('Vicino a te', 'Italia');
         setPoints(results);
+        showFeedback('📍 Punti di ritiro aggiornati con la tua posizione GPS!');
       },
       () => {
         setIsLocating(false);
-        alert('Impossibile rilevare la posizione GPS. Inserisci il tuo indirizzo o CAP manualmente.');
+        showFeedback('Impossibile rilevare la posizione GPS. Inserisci il tuo indirizzo o CAP manualmente.', true);
       },
       { timeout: 8000 }
     );
@@ -88,16 +96,21 @@ export const PickupPointSelectorModal: React.FC<PickupPointSelectorModalProps> =
   const handleAddAlternative = (pt: VintedPickupPoint) => {
     if (!onUpdateAlternativePoints) return;
     if (selectedPoint?.id === pt.id) {
-      alert('Questo punto è già il tuo punto principale.');
+      showFeedback('Questo punto è già il tuo punto principale.', true);
       return;
     }
-    if (alternativePoints.some((a) => a.id === pt.id)) return;
+    if (alternativePoints.some((a) => a.id === pt.id)) {
+      showFeedback('Questo punto è già nella lista dei punti alternativi.');
+      return;
+    }
     onUpdateAlternativePoints([...alternativePoints, pt]);
+    showFeedback(`✅ Aggiunto: ${pt.name}`);
   };
 
   const handleRemoveAlternative = (id: string) => {
     if (!onUpdateAlternativePoints) return;
     onUpdateAlternativePoints(alternativePoints.filter((a) => a.id !== id));
+    showFeedback('Punto alternativo rimosso.');
   };
 
   return (
@@ -129,6 +142,18 @@ export const PickupPointSelectorModal: React.FC<PickupPointSelectorModalProps> =
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Inline Feedback Banner */}
+        {modalMessage && (
+          <div className={`px-4 py-2 text-xs font-bold flex items-center justify-between transition-all ${
+            modalMessage.isError ? 'bg-rose-500/20 text-rose-300 border-b border-rose-500/30' : 'bg-teal-500/20 text-teal-300 border-b border-teal-500/30'
+          }`}>
+            <span>{modalMessage.text}</span>
+            <button type="button" onClick={() => setModalMessage(null)} className="text-zinc-400 hover:text-white ml-2">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Sub-tabs */}
         <div className="flex border-b border-zinc-800 bg-zinc-950/70 p-1 text-xs">

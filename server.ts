@@ -1523,12 +1523,28 @@ app.post('/api/vinted/account/connect', (req, res) => {
   });
 });
 
-// 3. Direct In-App Buy & Order Generation
+// 3. Direct In-App Buy & Order Generation (with Idempotency & Duplicate Prevention)
+const processedOrdersMap = new Map<string, any>();
+
 app.post('/api/vinted/checkout/buy', (req, res) => {
-  const { item, pickupPoint, account } = req.body || {};
+  const { item, pickupPoint, account, idempotencyKey } = req.body || {};
 
   if (!item || !pickupPoint) {
     return res.status(400).json({ success: false, error: 'Dati articolo o punto di ritiro mancanti.' });
+  }
+
+  const itemId = String(item.id || '');
+  const dedupeKey = idempotencyKey || itemId;
+
+  // Check if order was already processed (Idempotency protection against double-tap)
+  if (processedOrdersMap.has(dedupeKey)) {
+    const existingOrder = processedOrdersMap.get(dedupeKey);
+    return res.json({
+      success: true,
+      message: 'Ordine già confermato per questo articolo!',
+      order: existingOrder,
+      isDuplicate: true,
+    });
   }
 
   const itemPrice = Number(item.price) || 10;
@@ -1541,7 +1557,7 @@ app.post('/api/vinted/checkout/buy', (req, res) => {
 
   const order = {
     orderId,
-    itemId: item.id || `vnt-${Date.now()}`,
+    itemId: itemId || `vnt-${Date.now()}`,
     itemTitle: item.title || 'Articolo Vinted',
     itemBrand: item.brand || 'Vinted',
     itemSize: item.size || 'Unica',
@@ -1557,6 +1573,11 @@ app.post('/api/vinted/checkout/buy', (req, res) => {
     createdAt: Date.now(),
     status: 'CONFERMATO',
   };
+
+  processedOrdersMap.set(dedupeKey, order);
+  if (itemId) {
+    processedOrdersMap.set(itemId, order);
+  }
 
   res.json({
     success: true,
