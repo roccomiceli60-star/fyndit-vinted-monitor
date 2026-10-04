@@ -480,6 +480,14 @@ export default function App() {
     setMonitors((prev) => [created, ...prev]);
   };
 
+  const handleUpdateMonitor = (id: string, updated: Partial<VintedMonitor>) => {
+    setMonitors((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...updated } : m))
+    );
+    setToastMessage('Monitor aggiornato con successo!');
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   const handleToggleMonitorFilter = (monId: string) => {
     setSelectedMonitorFilter((prev) => {
       if (monId === 'all') {
@@ -600,6 +608,7 @@ export default function App() {
             onToggleMonitor={handleToggleMonitor}
             onDeleteMonitor={handleDeleteMonitor}
             onAddMonitor={handleAddMonitor}
+            onUpdateMonitor={handleUpdateMonitor}
             onViewInFeed={handleViewMonitorInFeed}
           />
         )}

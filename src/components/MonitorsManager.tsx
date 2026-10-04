@@ -14,7 +14,8 @@ import {
   Cat, 
   Tag, 
   Globe,
-  Send 
+  Send,
+  Pencil
 } from 'lucide-react';
 import { VintedMonitor, ConditionType } from '../types';
 import { VINTED_CATEGORIES } from '../data/vintedCategories';
@@ -25,6 +26,7 @@ interface MonitorsManagerProps {
   onToggleMonitor: (id: string) => void;
   onDeleteMonitor: (id: string) => void;
   onAddMonitor: (monitor: Omit<VintedMonitor, 'id' | 'createdAt' | 'matchCount'>) => void;
+  onUpdateMonitor?: (id: string, updated: Partial<VintedMonitor>) => void;
   onViewInFeed?: (monitorId: string) => void;
 }
 
@@ -33,12 +35,14 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
   onToggleMonitor,
   onDeleteMonitor,
   onAddMonitor,
+  onUpdateMonitor,
   onViewInFeed,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingMonitorId, setEditingMonitorId] = useState<string | null>(null);
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('all');
 
-  // New Monitor form state
+  // Monitor form state (shared between Create and Edit)
   const [name, setName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
@@ -87,6 +91,52 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
     return <Shirt className="w-4 h-4 text-cyan-400" />;
   };
 
+  const resetForm = () => {
+    setEditingMonitorId(null);
+    setName('');
+    setSelectedCategory('all');
+    setSelectedSubcategories([]);
+    setSelectedBrands([]);
+    setCustomBrandInput('');
+    setKeywords('');
+    setExcludedKeywords('fake, replica, rotto, non funzionante');
+    setMaxPrice(50);
+    setMinPrice(5);
+    setMinCondition('Tutte');
+    setSelectedCountries(['IT', 'FR', 'ES', 'PT', 'BE', 'NL', 'LU', 'AT', 'DE']);
+    setDiscordWebhookUrl('');
+  };
+
+  const handleOpenCreateModal = () => {
+    resetForm();
+    setShowAddModal(true);
+  };
+
+  const handleOpenEditModal = (mon: VintedMonitor) => {
+    setEditingMonitorId(mon.id);
+    setName(mon.name);
+
+    // Match category
+    const catDef = VINTED_CATEGORIES.find(
+      (c) => c.name.toLowerCase() === (mon.category || '').toLowerCase() || c.id === mon.category
+    );
+    setSelectedCategory(catDef ? catDef.id : 'all');
+    setSelectedSubcategories(mon.subcategories || []);
+    setSelectedBrands(mon.brands || []);
+    setKeywords(Array.isArray(mon.keywords) ? mon.keywords.join(', ') : '');
+    setExcludedKeywords(Array.isArray(mon.excludedKeywords) ? mon.excludedKeywords.join(', ') : '');
+    setMaxPrice(mon.maxPrice);
+    setMinPrice(mon.minPrice ?? 5);
+    setMinCondition((mon.minCondition as any) || 'Tutte');
+    setSelectedCountries(
+      Array.isArray(mon.countries) && mon.countries.length > 0
+        ? mon.countries
+        : ['IT', 'FR', 'ES', 'PT', 'BE', 'NL', 'LU', 'AT', 'DE']
+    );
+    setDiscordWebhookUrl(mon.discordWebhookUrl || '');
+    setShowAddModal(true);
+  };
+
   // Find active category definition
   const currentCategoryDef = VINTED_CATEGORIES.find((c) => c.id === selectedCategory) || VINTED_CATEGORIES[0];
 
@@ -132,7 +182,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
     setMaxPrice(maxP);
   };
 
-  const handleCreateMonitor = (e: React.FormEvent) => {
+  const handleSaveMonitor = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
@@ -151,7 +201,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
       finalKeywords = [name.trim()];
     }
 
-    onAddMonitor({
+    const monitorData = {
       name: name.trim(),
       category: selectedCategory === 'all' ? 'Tutte le Categorie' : currentCategoryDef.name,
       subcategories: selectedCategory === 'all' ? [] : selectedSubcategories,
@@ -163,18 +213,22 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
       minPrice: Number(minPrice),
       minCondition,
       countries: selectedCountries,
-      isActive: true,
-      enableSound: false,
-      enableNotifications: true,
       discordWebhookUrl: discordWebhookUrl.trim() || undefined,
-    });
+    };
+
+    if (editingMonitorId && onUpdateMonitor) {
+      onUpdateMonitor(editingMonitorId, monitorData);
+    } else {
+      onAddMonitor({
+        ...monitorData,
+        isActive: true,
+        enableSound: false,
+        enableNotifications: true,
+      });
+    }
 
     setShowAddModal(false);
-    // Reset form
-    setName('');
-    setSelectedBrands([]);
-    setKeywords('');
-    setSelectedSubcategories([]);
+    resetForm();
   };
 
   const filteredMonitors = monitors.filter((m) => {
@@ -200,7 +254,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
           </p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={handleOpenCreateModal}
           className="px-5 py-3 rounded-full bg-[#09B1BA] hover:bg-teal-400 active:scale-95 text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-teal-500/20 transition-all cursor-pointer self-start md:self-auto"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
@@ -357,27 +411,39 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
               </div>
             </div>
 
-            {/* Bottom bar with status and delete */}
+            {/* Bottom bar with status, edit and delete */}
             <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs gap-2">
-              {onViewInFeed ? (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {onViewInFeed ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewInFeed(mon.id)}
+                    className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    title="Filtra il feed Live Deals con questo monitor"
+                  >
+                    <Target className="w-3 h-3 text-teal-400" />
+                    <span>Vedi Drop</span>
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    Attivo
+                  </span>
+                )}
                 <button
                   type="button"
-                  onClick={() => onViewInFeed(mon.id)}
-                  className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-[11px] font-bold flex items-center gap-1 transition-all"
-                  title="Filtra il feed Live Deals con questo monitor"
+                  onClick={() => handleOpenEditModal(mon)}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700/80 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Modifica parametri di questo monitor"
                 >
-                  <Target className="w-3 h-3 text-teal-400" />
-                  <span>Vedi Drop nel Feed</span>
+                  <Pencil className="w-3 h-3 text-cyan-400" />
+                  <span>Modifica</span>
                 </button>
-              ) : (
-                <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  Scansione attiva (1.0s)
-                </span>
-              )}
+              </div>
+
               <button
                 onClick={() => onDeleteMonitor(mon.id)}
-                className="text-zinc-500 hover:text-red-400 p-1 transition-colors ml-auto"
+                className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors ml-auto cursor-pointer"
                 title="Elimina Monitor"
               >
                 <Trash2 className="w-4 h-4" />
@@ -399,8 +465,14 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                   <Target className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white text-base">Crea Monitor Sniper su Vinted</h3>
-                  <p className="text-xs text-zinc-400">Rileva affari in tempo reale su qualsiasi categoria</p>
+                  <h3 className="font-bold text-white text-base">
+                    {editingMonitorId ? 'Modifica Monitor Sniper' : 'Crea Monitor Sniper su Vinted'}
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    {editingMonitorId
+                      ? `Modifica i filtri e le impostazioni per "${name || 'questo monitor'}"`
+                      : 'Rileva affari in tempo reale su qualsiasi categoria'}
+                  </p>
                 </div>
               </div>
               <button
@@ -412,7 +484,7 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
             </div>
 
             {/* Modal Body / Form */}
-            <form onSubmit={handleCreateMonitor} className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+            <form onSubmit={handleSaveMonitor} className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
               
               {/* Quick Template Presets */}
               <div className="space-y-2">
@@ -787,9 +859,9 @@ export const MonitorsManager: React.FC<MonitorsManagerProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-full bg-[#09B1BA] hover:bg-teal-400 text-zinc-950 font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-teal-500/20 active:scale-95"
+                  className="px-6 py-2.5 rounded-full bg-[#09B1BA] hover:bg-teal-400 text-zinc-950 font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-teal-500/20 active:scale-95 cursor-pointer"
                 >
-                  Attiva Monitor Sniper
+                  {editingMonitorId ? 'Salva Modifiche' : 'Attiva Monitor Sniper'}
                 </button>
               </div>
 
